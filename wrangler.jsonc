@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lifolio",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+  // Add bindings here once Supabase/OpenAI integration lands, e.g.:
+  // "vars": { "NEXT_PUBLIC_SUPABASE_URL": "..." },
+  // "kv_namespaces": [{ "binding": "...", "id": "..." }]
+}
