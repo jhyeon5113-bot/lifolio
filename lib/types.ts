@@ -57,3 +57,29 @@ export interface ChatMessage {
   role: "ai" | "user";
   content: string;
 }
+
+export interface DecisionOption {
+  label: string;
+  title: string;
+  points: { icon: string; text: string }[];
+  accent: "secondary" | "primary";
+}
+
+export interface DecisionCaseDetail {
+  id: string;
+  tag: string;
+  date: string;
+  title: string;
+  subtitle: string;
+  contextParagraphs: string[];
+  options: DecisionOption[];
+  chosenOptionLabel: string;
+  criteria: { label: string; text: string }[];
+  expectation: string;
+  fear: string;
+  satisfactionScore: number;
+  outcomeQuote: string;
+  sameChoiceAgain: string;
+  expectationGap: string;
+  messageForOthers: string;
+}

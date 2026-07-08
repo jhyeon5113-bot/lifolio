@@ -3,6 +3,7 @@
 
 import type {
   ActiveDecision,
+  DecisionCaseDetail,
   HistoryEntry,
   LibraryCase,
   PendingReflection,
@@ -142,6 +143,71 @@ export const libraryCases: LibraryCase[] = [
     likes: "312",
   },
 ];
+
+// Detail content for library cases, transcribed from the Stitch screen
+// "의사결정 상세 사례 (디자인 정돈 및 만족도 점수화)". Only cases with an
+// entry here are clickable from the library grid.
+export const libraryCaseDetails: Record<string, DecisionCaseDetail> = {
+  "startup-challenge": {
+    id: "startup-challenge",
+    tag: "#커리어",
+    date: "2023년 11월 14일",
+    title: "의사결정 상세 사례 (스타트업 도전기)",
+    subtitle: "공대생의 일생일대 고민: 학업의 마무리인가, 혁신의 시작인가?",
+    contextParagraphs: [
+      "컴퓨터공학 전공 4학년 2학기, 졸업 프로젝트로 시작한 서비스가 뜻밖에 큰 반응을 얻었습니다. 한 달 만에 가입자가 5천 명을 넘어섰고, 초기 엔젤 투자 제안까지 들어온 상황이었습니다.",
+      "하지만 학위 취득까지는 한 학기가 남았고, 전공 필수 과목들의 과제량이 어마어마했습니다. 창업에 몰두하자니 졸업이 유예될 위험이 컸고, 학업을 우선하자니 시장의 뜨거운 반응과 투자 기회를 놓칠 것 같은 공포(FOMO)가 밀려왔습니다.",
+    ],
+    options: [
+      {
+        label: "Option A",
+        title: "학업 집중 및 졸업",
+        accent: "secondary",
+        points: [
+          { icon: "check_circle", text: "학위 취득의 안정성 확보" },
+          { icon: "check_circle", text: "부모님의 기대 충족 및 심리적 안정" },
+          { icon: "error", text: "시장 진입 타이밍 상실 위험" },
+        ],
+      },
+      {
+        label: "Option B",
+        title: "학업 유예 및 전업 창업",
+        accent: "primary",
+        points: [
+          { icon: "rocket_launch", text: "시장 기회 선점 및 서비스 고도화" },
+          { icon: "monetization_on", text: "초기 투자 유치를 통한 자금 확보" },
+          { icon: "warning", text: "졸업 실패 리스크 및 불투명한 미래" },
+        ],
+      },
+    ],
+    chosenOptionLabel: "Option B - 학업 유예 및 전업 창업",
+    criteria: [
+      {
+        label: "판단 기준 1",
+        text: "성장 동력의 타이밍: 시장의 흐름은 학위보다 빠르게 변한다.",
+      },
+      {
+        label: "판단 기준 2",
+        text: "몰입의 밀도: 양다리를 걸치면 둘 다 제대로 해낼 수 없다.",
+      },
+      {
+        label: "판단 기준 3",
+        text: "회복 탄력성: 실패해도 다시 학교로 돌아올 수 있는 젊음.",
+      },
+    ],
+    expectation:
+      "6개월 내로 시리즈 A 투자를 받고, 팀원을 10명 이상으로 확충하여 시장의 리더로 자리 잡는 것.",
+    fear: "자금 조달 실패 시 팀 해체, 졸업 유예로 인한 사회적 낙인 및 공백기에 대한 두려움.",
+    satisfactionScore: 92,
+    outcomeQuote:
+      "실제로 투자는 예상보다 늦어졌지만, 그 기간 동안 다져진 기술력과 유저 경험이 오히려 나중에 더 큰 기업 가치를 인정받는 계기가 되었습니다. 학교에서는 절대 배울 수 없는 실전 생존 방식을 터득했습니다.",
+    sameChoiceAgain:
+      "다시 돌아가도 같은 선택을 할 것입니다. 리스크 없는 성장은 없다는 것을 깨달았기 때문입니다.",
+    expectationGap:
+      "예상보다 행정적인 실무와 사람 관리가 훨씬 어려웠습니다. 기술이 전부가 아니었습니다.",
+    messageForOthers: "완벽한 타이밍은 없습니다. 당신이 선택한 그 순간이 최적의 타이밍입니다.",
+  },
+};
 
 export const consultQuickTopics = [
   "💼 진로 및 취업 고민",

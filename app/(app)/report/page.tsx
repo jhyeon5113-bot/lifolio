@@ -116,7 +116,7 @@ export default function ReportPage() {
           </div>
 
           {/* Keyword cloud */}
-          <div className="md:col-span-4 glass-card p-8 rounded-3xl bg-secondary-container/30 shadow-[0_4px_20px_rgba(26,35,126,0.04)]">
+          <div className="md:col-span-4 backdrop-blur-md p-8 rounded-3xl bg-secondary-container/30 shadow-[0_4px_20px_rgba(26,35,126,0.04)] border border-white/30">
             <h3 className="text-headline-md text-secondary mb-6">핵심 가치 키워드</h3>
             <div className="flex flex-wrap gap-3">
               <span className="px-6 py-3 bg-white/80 rounded-full font-bold text-lg text-primary shadow-sm">신중함</span>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/Header";
-import { libraryCases, libraryFilters } from "@/lib/mock-data";
+import { libraryCaseDetails, libraryCases, libraryFilters } from "@/lib/mock-data";
 
 export default function LibraryPage() {
   const [query, setQuery] = useState("");
@@ -49,7 +50,7 @@ export default function LibraryPage() {
             />
           </div>
 
-          <div className="glass-card rounded-xl p-4 flex items-center justify-between border border-primary/10 bg-primary/5">
+          <div className="backdrop-blur-md rounded-xl p-4 flex items-center justify-between border border-primary/10 bg-primary/5">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center">
                 <span className="material-symbols-outlined text-white fill">
@@ -91,11 +92,11 @@ export default function LibraryPage() {
         </section>
 
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 !mt-8">
-          {visibleCases.map((item) => (
-            <div
-              key={item.id}
-              className="group bg-white rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(26,35,126,0.04)] hover:shadow-[0_12px_24px_rgba(26,35,126,0.08)] transition-all flex flex-col h-full border border-outline-variant/20 p-6"
-            >
+          {visibleCases.map((item) => {
+            const hasDetail = Boolean(libraryCaseDetails[item.id]);
+            const cardClassName = `group bg-white rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(26,35,126,0.04)] hover:shadow-[0_12px_24px_rgba(26,35,126,0.08)] transition-all flex flex-col h-full border border-outline-variant/20 p-6 ${hasDetail ? "cursor-pointer" : ""}`;
+            const cardContent = (
+              <>
               <div className="flex justify-between items-start mb-4">
                 <div className="space-y-1">
                   <span className="text-xs font-bold text-primary tracking-wide">
@@ -107,6 +108,10 @@ export default function LibraryPage() {
                 </div>
                 <button
                   type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
                   className="text-on-surface-variant/40 hover:text-primary transition-colors"
                   aria-label="북마크"
                 >
@@ -163,8 +168,19 @@ export default function LibraryPage() {
                   </span>
                 </div>
               </div>
-            </div>
-          ))}
+              </>
+            );
+
+            return hasDetail ? (
+              <Link key={item.id} href={`/library/${item.id}`} className={cardClassName}>
+                {cardContent}
+              </Link>
+            ) : (
+              <div key={item.id} className={cardClassName}>
+                {cardContent}
+              </div>
+            );
+          })}
           {visibleCases.length === 0 && (
             <p className="col-span-full text-center text-on-surface-variant py-12">
               조건에 맞는 사례가 아직 없습니다.
