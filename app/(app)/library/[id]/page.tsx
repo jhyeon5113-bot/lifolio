@@ -1,30 +1,41 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
-import { libraryCaseDetails } from "@/lib/mock-data";
+import { RecordCaseView } from "@/components/RecordCaseView";
+import { getLibraryCaseDetail } from "@/lib/cases-repo";
 
 export default async function LibraryCaseDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
   const { id } = await params;
-  const detail = libraryCaseDetails[id];
+  const { returnTo } = await searchParams;
+  const detail = await getLibraryCaseDetail(id);
 
   if (!detail) {
     notFound();
   }
 
+  // Only ever honor an internal path — never redirect a "back" link off-site.
+  const backHref = returnTo && returnTo.startsWith("/") ? returnTo : "/library";
+
   return (
     <>
+      <RecordCaseView id={id} />
       <Header showSearch />
       <main className="pt-24 pb-8 px-4 md:px-grid-margin max-w-4xl mx-auto space-y-8">
         <Link
-          href="/library"
-          className="material-symbols-outlined text-primary hover:bg-primary/5 p-2 rounded-full transition-colors active:scale-95 duration-200 -ml-2 inline-flex w-fit"
-          aria-label="뒤로가기"
+          href={backHref}
+          className="text-primary hover:bg-primary/5 rounded-full transition-colors active:scale-95 duration-200 -ml-2 inline-flex items-center gap-1.5 w-fit px-2 py-2"
+          aria-label={backHref === "/library" ? "뒤로가기" : "상담으로 돌아가기"}
         >
-          arrow_back
+          <span className="material-symbols-outlined">arrow_back</span>
+          {backHref !== "/library" && (
+            <span className="text-label-md pr-1">상담으로 돌아가기</span>
+          )}
         </Link>
 
         {/* Header section */}
@@ -78,16 +89,18 @@ export default async function LibraryCaseDetailPage({
                 <h3 className="text-headline-md mb-3 text-primary">
                   {option.title}
                 </h3>
-                <ul className="space-y-2 text-on-surface-variant">
-                  {option.points.map((point) => (
-                    <li key={point.text} className="flex items-start gap-2">
-                      <span className="material-symbols-outlined text-sm mt-1">
-                        {point.icon}
-                      </span>
-                      {point.text}
-                    </li>
-                  ))}
-                </ul>
+                {option.points.length > 0 && (
+                  <ul className="space-y-2 text-on-surface-variant">
+                    {option.points.map((point) => (
+                      <li key={point.text} className="flex items-start gap-2">
+                        <span className="material-symbols-outlined text-sm mt-1">
+                          {point.icon}
+                        </span>
+                        {point.text}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
           </div>
@@ -104,7 +117,11 @@ export default async function LibraryCaseDetailPage({
                 {detail.chosenOptionLabel}
               </strong>
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+            <div
+              className={`grid grid-cols-1 gap-4 pt-4 ${
+                detail.criteria.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2"
+              }`}
+            >
               {detail.criteria.map((criterion) => (
                 <div key={criterion.label} className="bg-white/10 p-4 rounded-lg">
                   <span className="text-secondary-fixed text-xs font-bold block mb-1">
@@ -192,16 +209,43 @@ export default async function LibraryCaseDetailPage({
             </div>
           </div>
 
+          {/* Follow-up updates */}
+          {detail.followUpUpdates && detail.followUpUpdates.length > 0 && (
+            <div className="glass-card rounded-xl p-8 space-y-4">
+              <div className="flex items-center gap-2 text-primary">
+                <span className="material-symbols-outlined">update</span>
+                <h2 className="text-headline-md">그 이후 이야기</h2>
+              </div>
+              <div className="space-y-4">
+                {detail.followUpUpdates.map((update, index) => (
+                  <div
+                    key={index}
+                    className="p-4 bg-surface-container rounded-lg"
+                  >
+                    <span className="text-label-sm text-secondary font-bold uppercase tracking-wider block mb-1">
+                      {update.label}
+                    </span>
+                    <p className="text-sm text-on-surface leading-relaxed">
+                      {update.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Message for others */}
-          <div className="glass-card rounded-xl p-8 space-y-6">
-            <div className="flex items-center gap-2 text-primary">
-              <span className="material-symbols-outlined">format_quote</span>
-              <h2 className="text-headline-md">다른 사용자를 위한 한마디</h2>
+          {detail.messageForOthers && (
+            <div className="glass-card rounded-xl p-8 space-y-6">
+              <div className="flex items-center gap-2 text-primary">
+                <span className="material-symbols-outlined">format_quote</span>
+                <h2 className="text-headline-md">다른 사용자를 위한 한마디</h2>
+              </div>
+              <div className="p-6 bg-surface-container-highest rounded-lg italic text-on-surface">
+                &ldquo;{detail.messageForOthers}&rdquo;
+              </div>
             </div>
-            <div className="p-6 bg-surface-container-highest rounded-lg italic text-on-surface">
-              &ldquo;{detail.messageForOthers}&rdquo;
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="flex justify-center pt-8">

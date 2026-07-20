@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { PendingReflection } from "@/lib/types";
+import { useEscapeToClose } from "@/lib/useEscapeToClose";
 
 export function TimeCapsuleModal({
   reflection,
@@ -12,6 +13,7 @@ export function TimeCapsuleModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  useEscapeToClose(onClose);
 
   return (
     <div
@@ -23,7 +25,7 @@ export function TimeCapsuleModal({
         <div className="relative flex flex-col items-center mb-[-40px] z-10">
           <div className="glass-card p-6 rounded-2xl shadow-xl border border-white/40 mb-6 relative">
             <p className="text-body-lg text-primary text-center leading-relaxed">
-              안녕하세요! {Math.round(reflection.daysElapsed / 30)}개월 전
+              안녕하세요! {Math.round(reflection.decisionDaysAgo / 30)}개월 전
               결정하신 <br />
               <span className="font-bold text-tertiary">
                 &lsquo;{reflection.decisionLabel}&rsquo;
@@ -56,7 +58,7 @@ export function TimeCapsuleModal({
           <div className="w-full space-y-3">
             <button
               type="button"
-              onClick={() => router.push("/capsule")}
+              onClick={() => router.push(`/capsule?decisionId=${reflection.id}`)}
               className="w-full py-4 bg-primary text-on-primary rounded-xl text-label-md shadow-lg shadow-primary/20 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
             >
               <span>지금 바로 회고하기</span>

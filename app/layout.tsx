@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Noto_Sans_KR } from "next/font/google";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -20,6 +21,16 @@ export const metadata: Metadata = {
     "당신의 의사결정 과정과 결과를 구조화하여 기록하는 라이프로그 플랫폼, Lifolio.",
 };
 
+// viewportFit: "cover" lets the page draw under the iPhone notch/home
+// indicator so env(safe-area-inset-*) resolves to real values instead of 0
+// — without it, fixed bottom nav/sheets can sit flush against the home
+// indicator gesture area with no clearance.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -36,7 +47,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full font-sans">{children}</body>
+      <body className="min-h-full font-sans">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

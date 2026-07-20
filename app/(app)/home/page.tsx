@@ -2,31 +2,193 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Header } from "@/components/Header";
 import { Fab } from "@/components/Fab";
-import { TimeCapsuleModal } from "@/components/TimeCapsuleModal";
+import { LoadError } from "@/components/LoadError";
+import { LibraryCaseCard } from "@/components/LibraryCaseCard";
+import { PendingReflectionCard } from "@/components/home/PendingReflectionCard";
+import { ActiveDecisionCard } from "@/components/home/ActiveDecisionCard";
+import { CompletedDecisionCard } from "@/components/home/CompletedDecisionCard";
+import { currentUser } from "@/lib/mock-data";
+import type { PendingReflection, LibraryCase } from "@/lib/types";
+import type { ActiveDecisionView, CompletedDecisionView } from "@/lib/active-decisions-data";
+import type { DecisionCheckInStatus } from "@/lib/decision-status-presentation";
 import {
-  activeDecisions,
-  currentUser,
-  decisionQualityTrend,
-  pendingReflection,
-} from "@/lib/mock-data";
+  REFLECTION_SAVED_TOAST_KEY,
+  type ReflectionSavedToastPayload,
+} from "@/lib/reflection-saved-toast";
+import { toPendingReflections, type PendingReflectionDecision } from "@/lib/pending-reflection-view";
+import { useSavedCases } from "@/lib/useSavedCases";
+import { useLikedCases } from "@/lib/useLikedCases";
 
 const DISMISS_KEY = "lifolio_capsule_dismissed";
 
+// Overlays that only ever mount after user interaction or an async fetch —
+// never needed for the initial paint, so split them out of the /home bundle
+// instead of loading their code up front.
+const TimeCapsuleModal = dynamic(() => import("@/components/TimeCapsuleModal").then((m) => m.TimeCapsuleModal), {
+  ssr: false,
+});
+const DecisionStatusSheet = dynamic(
+  () => import("@/components/DecisionStatusSheet").then((m) => m.DecisionStatusSheet),
+  { ssr: false },
+);
+const ReflectionTimelineSheet = dynamic(
+  () => import("@/components/ReflectionTimelineSheet").then((m) => m.ReflectionTimelineSheet),
+  { ssr: false },
+);
+const ReflectionSavedToast = dynamic(
+  () => import("@/components/ReflectionSavedToast").then((m) => m.ReflectionSavedToast),
+  { ssr: false },
+);
+
 export default function HomePage() {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const userName = session?.user?.name ?? currentUser.name;
   const [showCapsuleModal, setShowCapsuleModal] = useState(false);
+  const [pendingReflections, setPendingReflections] = useState<PendingReflection[]>([]);
+  const [activeDecisions, setActiveDecisions] = useState<ActiveDecisionView[]>([]);
+  const [completedDecisions, setCompletedDecisions] = useState<CompletedDecisionView[]>([]);
+  const [todaysReading, setTodaysReading] = useState<LibraryCase[]>([]);
+  const [statusSheetDecisionId, setStatusSheetDecisionId] = useState<string | null>(null);
+  const [timelineDecision, setTimelineDecision] = useState<{ id: string; title: string } | null>(null);
+  const [savedToast, setSavedToast] = useState<ReflectionSavedToastPayload | null>(null);
+  const [activeError, setActiveError] = useState(false);
+  const [completedError, setCompletedError] = useState(false);
+  const [readingError, setReadingError] = useState(false);
+  const [pendingError, setPendingError] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const { isSaved, toggleSaved } = useSavedCases();
+  const { isLiked, toggleLiked } = useLikedCases();
 
   useEffect(() => {
+    const raw = sessionStorage.getItem(REFLECTION_SAVED_TOAST_KEY);
+    if (!raw) return;
+    try {
+      const payload: ReflectionSavedToastPayload = JSON.parse(raw);
+      if (payload.expiresAt > Date.now()) {
+        setSavedToast(payload);
+      } else {
+        sessionStorage.removeItem(REFLECTION_SAVED_TOAST_KEY);
+      }
+    } catch {
+      sessionStorage.removeItem(REFLECTION_SAVED_TOAST_KEY);
+    }
+  }, []);
+
+  const dismissSavedToast = () => {
+    sessionStorage.removeItem(REFLECTION_SAVED_TOAST_KEY);
+    setSavedToast(null);
+  };
+
+  const handleSavedToastEdit = () => {
+    if (!savedToast) return;
+    const { decisionId, reflectionId } = savedToast;
+    dismissSavedToast();
+    router.push(`/capsule?decisionId=${decisionId}&reflectionId=${reflectionId}`);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setActiveError(false);
+    fetch("/api/decisions/active")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`${res.status}`))))
+      .then(({ decisions }: { decisions: ActiveDecisionView[] }) => {
+        if (!cancelled) setActiveDecisions(decisions);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retryTick]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCompletedError(false);
+    fetch("/api/decisions/completed")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`${res.status}`))))
+      .then(({ decisions }: { decisions: CompletedDecisionView[] }) => {
+        if (!cancelled) setCompletedDecisions(decisions);
+      })
+      .catch(() => {
+        if (!cancelled) setCompletedError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retryTick]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReadingError(false);
+    fetch("/api/library/today")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`${res.status}`))))
+      .then(({ cases }: { cases: LibraryCase[] }) => {
+        if (!cancelled) setTodaysReading(cases);
+      })
+      .catch(() => {
+        if (!cancelled) setReadingError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retryTick]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPendingError(false);
+    fetch("/api/decisions/pending-reflection")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`${res.status}`))))
+      .then(({ decisions }: { decisions: PendingReflectionDecision[] }) => {
+        if (!cancelled) setPendingReflections(toPendingReflections(decisions));
+      })
+      .catch(() => {
+        if (!cancelled) setPendingError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retryTick]);
+
+  useEffect(() => {
+    if (pendingReflections.length === 0) return;
+    if (savedToast) return; // don't stack two centered overlays
     if (sessionStorage.getItem(DISMISS_KEY) !== "1") {
       const timer = setTimeout(() => setShowCapsuleModal(true), 600);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [pendingReflections, savedToast]);
 
   const dismissModal = () => {
     sessionStorage.setItem(DISMISS_KEY, "1");
     setShowCapsuleModal(false);
+  };
+
+  const handleStatusSelect = async (status: DecisionCheckInStatus) => {
+    const decisionId = statusSheetDecisionId;
+    if (!decisionId) return;
+    setStatusSheetDecisionId(null);
+    const previous = activeDecisions;
+    setActiveDecisions((prev) =>
+      prev.map((decision) => (decision.id === decisionId ? { ...decision, currentStatus: status } : decision)),
+    );
+    try {
+      const res = await fetch(`/api/decisions/${decisionId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+    } catch {
+      // Revert the optimistic update — the server never actually saved it.
+      setActiveDecisions(previous);
+    }
   };
 
   return (
@@ -61,71 +223,67 @@ export default function HomePage() {
 
         <section className="mb-10">
           <h1 className="text-headline-lg-mobile md:text-headline-lg text-on-surface tracking-tight leading-snug">
-            안녕하세요, <span className="text-primary">{currentUser.name}</span>
+            안녕하세요, <span className="text-primary">{userName}</span>
             님.
             <br />
             기록은 더 나은 선택으로 이어집니다.
           </h1>
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-          {/* Pending reflection */}
-          <div className="lg:col-span-4 flex flex-col">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="material-symbols-outlined text-primary fill">
-                pending_actions
-              </span>
-              <h2 className="text-label-sm uppercase tracking-wider text-outline">
-                회고 대기 중
-              </h2>
-            </div>
-            <div className="border border-outline-variant p-u-md rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 flex-grow bg-white">
-              <div className="mb-2 flex justify-between items-center">
-                <span className="text-label-sm text-secondary px-2 py-0.5 rounded-full bg-secondary-container/60">
-                  결정 후 {pendingReflection.daysElapsed}일 경과
+        <div className="flex flex-col gap-gutter">
+          {/* Pending reflections */}
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary fill">
+                  pending_actions
                 </span>
-                <span className="material-symbols-outlined text-secondary text-sm">
-                  schedule
-                </span>
-              </div>
-              <h3 className="text-title-lg text-on-surface mb-4">
-                {pendingReflection.title}
-              </h3>
-              <div className="mb-6">
-                <div className="flex justify-between text-[10px] font-bold text-outline mb-1">
-                  <span>회고 시점 도달</span>
-                  <span>100%</span>
-                </div>
-                <div className="w-full bg-surface-container-low h-2 rounded-full overflow-hidden">
-                  <div className="bg-secondary h-full w-full" />
-                </div>
-              </div>
-              <div className="space-y-3 mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  <p className="text-body-md text-on-surface-variant">
-                    내 선택: {pendingReflection.choiceSummary}
-                  </p>
-                </div>
-                <p className="text-label-md text-outline leading-relaxed">
-                  {pendingReflection.note}
-                </p>
+                <h2 className="text-label-sm uppercase tracking-wider text-outline">
+                  회고 대기 중
+                </h2>
               </div>
               <Link
-                href="/capsule"
-                className="w-full bg-secondary hover:bg-secondary/90 text-on-secondary text-label-md py-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 group"
+                href="/home/pending-reflections"
+                className="text-label-md text-primary-container flex items-center gap-1 hover:underline"
               >
-                <span>지금 바로 회고하기</span>
-                <span className="text-xs opacity-70">(30초면 충분해요)</span>
-                <span className="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform">
-                  edit_note
+                전체보기{" "}
+                <span className="material-symbols-outlined text-sm">
+                  chevron_right
                 </span>
               </Link>
+            </div>
+            <div className="flex overflow-x-auto gap-u-md hide-scrollbar pb-4 snap-x">
+              {pendingError ? (
+                <LoadError className="min-w-[300px]" onRetry={() => setRetryTick((n) => n + 1)} />
+              ) : (
+                <>
+                  {pendingReflections.length === 0 && (
+                    <div className="min-w-[300px] md:min-w-[400px] snap-start h-full flex flex-col items-center justify-center text-center py-10 gap-2 border border-outline-variant p-u-md rounded-xl shadow-sm bg-white">
+                      <span className="material-symbols-outlined text-3xl text-outline">
+                        task_alt
+                      </span>
+                      <p className="text-body-md text-on-surface-variant">
+                        아직 회고할 결정이 없어요.
+                      </p>
+                      <p className="text-label-sm text-outline">
+                        최종 선택을 마치면 여기에 표시됩니다.
+                      </p>
+                    </div>
+                  )}
+                  {pendingReflections.map((item) => (
+                    <PendingReflectionCard
+                      key={item.id}
+                      item={item}
+                      className="min-w-[300px] md:min-w-[400px] snap-start"
+                    />
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
           {/* Active decisions */}
-          <div className="lg:col-span-8">
+          <div>
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary fill">
@@ -136,7 +294,7 @@ export default function HomePage() {
                 </h2>
               </div>
               <Link
-                href="/history"
+                href="/home/active-decisions"
                 className="text-label-md text-primary-container flex items-center gap-1 hover:underline"
               >
                 전체보기{" "}
@@ -145,42 +303,67 @@ export default function HomePage() {
                 </span>
               </Link>
             </div>
-            <div className="flex overflow-x-auto gap-u-md hide-scrollbar pb-4 snap-x">
-              {activeDecisions.map((decision) => (
-                <div
-                  key={decision.id}
-                  className={`min-w-[280px] md:min-w-[340px] snap-start bg-white border border-outline-variant p-u-md rounded-xl shadow-sm flex flex-col justify-between ${
-                    decision.status === "waiting" ? "opacity-70" : ""
-                  }`}
-                >
-                  <div>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center">
-                        <span className="material-symbols-outlined text-secondary">
-                          {decision.icon}
-                        </span>
-                      </div>
-                      <span className="text-label-sm text-on-surface-variant bg-surface-container-high px-3 py-1 rounded-full">
-                        {decision.badge}
-                      </span>
-                    </div>
-                    <h3 className="text-title-lg text-on-surface mb-2">
-                      {decision.title}
-                    </h3>
-                    <p className="text-body-md text-on-surface-variant mb-6 line-clamp-2">
-                      {decision.description}
+            <div className="flex items-start overflow-x-auto gap-u-md hide-scrollbar pb-4 snap-x">
+              {activeError ? (
+                <LoadError onRetry={() => setRetryTick((n) => n + 1)} />
+              ) : (
+                <>
+                  {activeDecisions.length === 0 && (
+                    <p className="text-body-md text-on-surface-variant py-6">
+                      진행 중인 의사결정이 없어요.
                     </p>
-                  </div>
-                  <div className="w-full bg-surface-container-low h-1 rounded-full overflow-hidden">
-                    <div
-                      className="bg-secondary h-full"
-                      style={{ width: `${decision.progress}%` }}
+                  )}
+                  {activeDecisions.map((decision) => (
+                    <ActiveDecisionCard
+                      key={decision.id}
+                      decision={decision}
+                      onStatusUpdateClick={setStatusSheetDecisionId}
+                      className="min-w-[280px] md:min-w-[340px] snap-start"
                     />
-                  </div>
-                </div>
-              ))}
+                  ))}
+                </>
+              )}
             </div>
           </div>
+
+          {/* Completed (reflected-on) decisions */}
+          {(completedDecisions.length > 0 || completedError) && (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary fill">
+                    check_circle
+                  </span>
+                  <h2 className="text-label-sm uppercase tracking-wider text-outline">
+                    회고 완료된 의사결정
+                  </h2>
+                </div>
+                <Link
+                  href="/home/completed-decisions"
+                  className="text-label-md text-primary-container flex items-center gap-1 hover:underline"
+                >
+                  전체보기{" "}
+                  <span className="material-symbols-outlined text-sm">
+                    chevron_right
+                  </span>
+                </Link>
+              </div>
+              <div className="flex overflow-x-auto gap-u-md hide-scrollbar pb-4 snap-x">
+                {completedError ? (
+                  <LoadError onRetry={() => setRetryTick((n) => n + 1)} />
+                ) : (
+                  completedDecisions.map((decision) => (
+                    <CompletedDecisionCard
+                      key={decision.id}
+                      decision={decision}
+                      onTimelineClick={setTimelineDecision}
+                      className="min-w-[300px] md:min-w-[360px] snap-start"
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <section className="mt-gutter">
@@ -202,64 +385,60 @@ export default function HomePage() {
                 &rdquo;
               </p>
             </div>
-            <Link
-              href="/report"
-              className="relative z-10 ml-auto hidden md:block bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 px-6 py-2 rounded-full text-label-md transition-colors"
-            >
-              인사이트 리포트 보기
-            </Link>
           </div>
         </section>
 
         <section className="mt-gutter mb-12">
-          <div className="bg-white rounded-xl border border-outline-variant p-u-md overflow-hidden">
-            <div className="flex justify-between items-end mb-8">
-              <div>
-                <h4 className="text-label-sm text-outline mb-1">
-                  결정 품질 추이
-                </h4>
-                <p className="text-headline-md text-on-surface">
-                  종합 지수 78.4
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-secondary font-bold">+12%</span>
-                <p className="text-label-sm text-outline">지난주 대비</p>
-              </div>
-            </div>
-            <div className="flex items-end gap-2 h-32">
-              {decisionQualityTrend.map((value, index) => {
-                const isPeak = value === Math.max(...decisionQualityTrend);
-                return (
-                  <div
-                    key={index}
-                    className={`flex-1 rounded-t-sm transition-all cursor-pointer group relative ${
-                      isPeak
-                        ? "bg-primary"
-                        : "bg-surface-container-high hover:bg-primary"
-                    }`}
-                    style={{ height: `${value}%` }}
-                  >
-                    <div
-                      className={`absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold transition-opacity ${
-                        isPeak ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                      }`}
-                    >
-                      {value}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-symbols-outlined text-primary fill">
+              auto_stories
+            </span>
+            <h2 className="text-label-sm uppercase tracking-wider text-outline">
+              오늘의 읽을거리
+            </h2>
           </div>
+          {readingError ? (
+            <LoadError onRetry={() => setRetryTick((n) => n + 1)} />
+          ) : todaysReading.length === 0 ? (
+            <p className="text-body-md text-on-surface-variant py-6">
+              오늘 추천할 사례를 준비 중이에요.
+            </p>
+          ) : (
+            <div className="max-w-[400px]">
+              <LibraryCaseCard
+                item={todaysReading[0]}
+                hasDetail
+                saved={isSaved(todaysReading[0].id)}
+                onToggleSave={toggleSaved}
+                liked={isLiked(todaysReading[0].id)}
+                onToggleLike={toggleLiked}
+              />
+            </div>
+          )}
         </section>
       </main>
       <Fab />
-      {showCapsuleModal && (
+      {showCapsuleModal && pendingReflections[0] && (
         <TimeCapsuleModal
-          reflection={pendingReflection}
+          reflection={pendingReflections[0]}
           onClose={dismissModal}
         />
+      )}
+      {statusSheetDecisionId && (
+        <DecisionStatusSheet
+          onSelect={handleStatusSelect}
+          onClose={() => setStatusSheetDecisionId(null)}
+        />
+      )}
+      {timelineDecision && (
+        <ReflectionTimelineSheet
+          decisionId={timelineDecision.id}
+          decisionTitle={timelineDecision.title}
+          onClose={() => setTimelineDecision(null)}
+        />
+      )}
+      {savedToast && (
+        <ReflectionSavedToast onEdit={handleSavedToastEdit} onClose={dismissSavedToast} />
       )}
     </>
   );

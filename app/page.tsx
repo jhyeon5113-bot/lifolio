@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 export default function SplashPage() {
   const router = useRouter();
+  const { status } = useSession();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const showTimer = setTimeout(() => setVisible(true), 50);
-    const redirectTimer = setTimeout(() => router.push("/login"), 2600);
-    return () => {
-      clearTimeout(showTimer);
-      clearTimeout(redirectTimer);
-    };
-  }, [router]);
+    return () => clearTimeout(showTimer);
+  }, []);
+
+  useEffect(() => {
+    if (status === "loading") return;
+    const redirectTimer = setTimeout(() => {
+      router.push(status === "authenticated" ? "/home" : "/login");
+    }, 2600);
+    return () => clearTimeout(redirectTimer);
+  }, [router, status]);
 
   return (
     <main

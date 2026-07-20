@@ -16,7 +16,7 @@ export function BottomNav() {
   return (
     <>
       {/* Mobile bottom bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-margin-mobile py-2 bg-surface/95 backdrop-blur-xl border-t border-outline-variant/10 shadow-[0_-4px_20px_rgba(0,6,102,0.04)]">
+      <nav className="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-margin-mobile pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] bg-surface/95 backdrop-blur-xl border-t border-outline-variant/10 shadow-[0_-4px_20px_rgba(0,6,102,0.04)]">
         {NAV_ITEMS.map((item) => {
           const active = pathname.startsWith(item.href);
           return (

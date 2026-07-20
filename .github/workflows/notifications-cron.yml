@@ -1,0 +1,47 @@
+name: Notification cron
+
+# Fires 3x/day and just calls the two internal notification routes over
+# HTTP — all the real logic (who's due, what to send) lives in the app
+# itself (lib/notifications/, app/api/internal/notifications/). This
+# workflow has no app code, no DB access, nothing to keep in sync with the
+# app beyond the two URLs below.
+#
+# Replaces the standalone Cloudflare Worker approach (cron-worker/, now
+# removed) — chosen because the app deploys to Vercel, and Vercel's own
+# Cron Jobs feature caps free/Hobby-plan projects at once-a-day, which
+# can't do the 3-times-a-day slot schedule this feature needs.
+#
+# Known limitation: GitHub disables a repo's scheduled workflows after 60
+# days with no commits to the default branch, and schedule times can slip
+# by several minutes to over an hour during periods of high platform load
+# (GitHub does not guarantee exact-time execution for `schedule` triggers).
+# For an actively-developed MVP this isn't a practical concern, but it's
+# worth knowing if the repo goes quiet for an extended stretch later.
+
+on:
+  schedule:
+    # UTC times — 00:00 / 04:00 / 11:00 UTC = 09:00 / 13:00 / 20:00 KST.
+    # Keep in sync with lib/notifications/kst.ts's DELIVERY_SLOT_HOURS_KST
+    # if either ever changes.
+    - cron: "0 0 * * *"
+    - cron: "0 4 * * *"
+    - cron: "0 11 * * *"
+  workflow_dispatch: {} # lets you trigger a run manually from the Actions tab, for testing
+
+jobs:
+  trigger-notifications:
+    runs-on: ubuntu-latest
+    # Secret/variable are set on a GitHub Environment named "production"
+    # (repo → Settings → Environments), not as plain repo-level secrets —
+    # this tells the job to pull from that environment's values.
+    environment: production
+    steps:
+      - name: Compute today's notification queue
+        run: |
+          curl -sf -X POST "${{ vars.LIFOLIO_BASE_URL }}/api/internal/notifications/compute-daily" \
+            -H "Authorization: Bearer ${{ secrets.INTERNAL_NOTIFICATIONS_SECRET }}"
+
+      - name: Deliver whatever's due right now
+        run: |
+          curl -sf -X POST "${{ vars.LIFOLIO_BASE_URL }}/api/internal/notifications/deliver" \
+            -H "Authorization: Bearer ${{ secrets.INTERNAL_NOTIFICATIONS_SECRET }}"

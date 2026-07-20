@@ -4,35 +4,16 @@
 // so the mock data below can be swapped for real queries later
 // without changing the page components.
 
-export type DecisionStatus = "active" | "waiting" | "pending_reflection";
-
-export interface ActiveDecision {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  badge: string;
-  progress: number;
-  status: DecisionStatus;
-}
-
 export interface PendingReflection {
   id: string;
   title: string;
+  /** Days since the user's scheduled reflection date (falls back to decision date if none was set). */
   daysElapsed: number;
+  /** Days since the decision itself was made — used for "N일 전 결정하신" style copy. */
+  decisionDaysAgo: number;
   choiceSummary: string;
   note: string;
   decisionLabel: string;
-}
-
-export interface HistoryEntry {
-  id: string;
-  date: string;
-  tag: string;
-  title: string;
-  context: string;
-  why: string;
-  outcome: string;
 }
 
 export interface LibraryStep {
@@ -43,19 +24,16 @@ export interface LibraryStep {
 
 export interface LibraryCase {
   id: string;
+  /** One of the `libraryFilters` values (used for exact-match filtering). */
+  category: string;
   tags: string;
   title: string;
   steps: LibraryStep[];
   authorInitials: string;
   authorAvatarColor: string;
-  views: string;
-  likes: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: "ai" | "user";
-  content: string;
+  /** Real server-tracked counts (CaseProfile.viewCount/likeCount) — not per-viewer, see lib/case-engagement.ts. */
+  viewCount: number;
+  likeCount: number;
 }
 
 export interface DecisionOption {
@@ -81,5 +59,6 @@ export interface DecisionCaseDetail {
   outcomeQuote: string;
   sameChoiceAgain: string;
   expectationGap: string;
-  messageForOthers: string;
+  messageForOthers?: string;
+  followUpUpdates?: { label: string; text: string }[];
 }

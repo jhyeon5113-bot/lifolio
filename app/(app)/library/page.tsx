@@ -1,25 +1,88 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { libraryCaseDetails, libraryCases, libraryFilters } from "@/lib/mock-data";
+import { LibraryCaseCard } from "@/components/LibraryCaseCard";
+import { LoadError } from "@/components/LoadError";
+import { libraryFilters } from "@/lib/mock-data";
+import type { DecisionCaseDetail } from "@/lib/types";
+import { useSavedCases } from "@/lib/useSavedCases";
+import { useLikedCases } from "@/lib/useLikedCases";
+import { useLibraryData } from "@/lib/useLibraryData";
+
+// Not a real decision_cases category — matched by case ID membership
+// (my own approved LibraryCaseSubmission rows) instead of category string,
+// so it's kept out of the shared `libraryFilters` list used by other pages.
+const MY_DECISIONS_FILTER = "나의 의사결정";
+
+function detailSearchText(detail: DecisionCaseDetail | undefined): string {
+  if (!detail) return "";
+  return [
+    detail.title,
+    detail.subtitle,
+    ...detail.contextParagraphs,
+    ...detail.options.flatMap((option) => [
+      option.title,
+      ...option.points.map((point) => point.text),
+    ]),
+    detail.chosenOptionLabel,
+    ...detail.criteria.map((criterion) => criterion.text),
+    detail.expectation,
+    detail.fear,
+    detail.outcomeQuote,
+    detail.sameChoiceAgain,
+    detail.expectationGap,
+    detail.messageForOthers ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+}
 
 export default function LibraryPage() {
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState(libraryFilters[0]);
+  const [myCaseIds, setMyCaseIds] = useState<Set<string>>(new Set());
+  const { isSaved, toggleSaved } = useSavedCases();
+  const { isLiked, toggleLiked } = useLikedCases();
+  const { cases: libraryCases, details: libraryCaseDetails, error: libraryError, retry: retryLibrary } = useLibraryData();
+
+  const filters = useMemo(() => [...libraryFilters, MY_DECISIONS_FILTER], []);
+
+  useEffect(() => {
+    fetch("/api/library/mine")
+      .then((res) => (res.ok ? res.json() : { caseIds: [] }))
+      .then(({ caseIds }: { caseIds: string[] }) => setMyCaseIds(new Set(caseIds)))
+      .catch(() => {});
+  }, []);
+
+  // Precompute each case's full detail-page text once, so typing in the
+  // search box doesn't re-flatten every detail record on every keystroke.
+  const searchIndex = useMemo(() => {
+    const index: Record<string, string> = {};
+    for (const item of libraryCases) {
+      index[item.id] = detailSearchText(libraryCaseDetails[item.id]);
+    }
+    return index;
+  }, [libraryCases, libraryCaseDetails]);
 
   const visibleCases = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
     return libraryCases.filter((item) => {
       const matchesFilter =
-        activeFilter === libraryFilters[0] || item.tags.includes(activeFilter);
+        activeFilter === libraryFilters[0]
+          ? true
+          : activeFilter === MY_DECISIONS_FILTER
+            ? myCaseIds.has(item.id)
+            : item.category === activeFilter;
       const matchesQuery =
-        query.trim() === "" ||
-        item.title.includes(query) ||
-        item.tags.includes(query);
+        normalizedQuery === "" ||
+        item.title.toLowerCase().includes(normalizedQuery) ||
+        item.tags.toLowerCase().includes(normalizedQuery) ||
+        searchIndex[item.id]?.includes(normalizedQuery);
       return matchesFilter && matchesQuery;
     });
-  }, [query, activeFilter]);
+  }, [query, activeFilter, searchIndex, libraryCases, myCaseIds]);
 
   return (
     <>
@@ -44,147 +107,73 @@ export default function LibraryPage() {
             <input
               className="w-full pl-12 pr-6 py-4 bg-white border border-outline-variant/30 rounded-xl shadow-sm focus:ring-2 focus:ring-primary focus:border-primary transition-all text-body-md"
               placeholder="고민 키워드를 검색해보세요 (예: 스타트업)"
+              aria-label="고민 키워드 검색"
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-
-          <div className="backdrop-blur-md rounded-xl p-4 flex items-center justify-between border border-primary/10 bg-primary/5">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center">
-                <span className="material-symbols-outlined text-white fill">
-                  auto_awesome
-                </span>
-              </div>
-              <div>
-                <p className="text-label-md text-primary">AI 맞춤 추천</p>
-                <p className="text-[12px] text-on-surface-variant">
-                  현재 나의 고민과 가장 비슷한 케이스를 분석합니다.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="bg-primary/70 text-white w-12 h-12 rounded-xl text-[12px] hover:scale-105 transition-transform active:scale-95 shadow-md flex flex-col items-center justify-center leading-tight font-medium"
-            >
-              <span>추천</span>
-              <span>받기</span>
-            </button>
-          </div>
         </section>
 
         <section className="flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-          {libraryFilters.map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              onClick={() => setActiveFilter(filter)}
-              className={`px-5 py-2 rounded-full text-label-md whitespace-nowrap transition-colors ${
-                activeFilter === filter
-                  ? "bg-primary text-on-primary"
-                  : "bg-white border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container"
-              }`}
-            >
-              {filter}
-            </button>
-          ))}
-        </section>
-
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 !mt-8">
-          {visibleCases.map((item) => {
-            const hasDetail = Boolean(libraryCaseDetails[item.id]);
-            const cardClassName = `group bg-white rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(26,35,126,0.04)] hover:shadow-[0_12px_24px_rgba(26,35,126,0.08)] transition-all flex flex-col h-full border border-outline-variant/20 p-6 ${hasDetail ? "cursor-pointer" : ""}`;
-            const cardContent = (
-              <>
-              <div className="flex justify-between items-start mb-4">
-                <div className="space-y-1">
-                  <span className="text-xs font-bold text-primary tracking-wide">
-                    {item.tags}
-                  </span>
-                  <h3 className="text-[20px] text-on-surface group-hover:text-primary transition-colors">
-                    {item.title}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                  }}
-                  className="text-on-surface-variant/40 hover:text-primary transition-colors"
-                  aria-label="북마크"
-                >
-                  <span className="material-symbols-outlined">bookmark</span>
-                </button>
-              </div>
-
-              <div className="space-y-3 flex-1">
-                {item.steps.map((step, index) => (
-                  <div key={step.label} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`w-2.5 h-2.5 rounded-full mt-1.5 ${step.dotColor}`}
-                      />
-                      {index < item.steps.length - 1 && (
-                        <div className="w-0.5 flex-1 bg-outline-variant/20" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-bold text-outline uppercase tracking-wider">
-                        {step.label}
-                      </p>
-                      <p className="text-sm text-on-surface-variant">
-                        {step.value}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-outline-variant/20 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold ${item.authorAvatarColor}`}
-                  >
-                    {item.authorInitials}
-                  </div>
-                  <span className="text-xs text-on-surface-variant font-medium">
-                    익명의 사용자
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 text-on-surface-variant/70">
-                  <span className="flex items-center gap-1 text-[11px]">
-                    <span className="material-symbols-outlined text-[14px]">
-                      visibility
-                    </span>{" "}
-                    {item.views}
-                  </span>
-                  <span className="flex items-center gap-1 text-[11px]">
-                    <span className="material-symbols-outlined text-[14px]">
-                      favorite
-                    </span>{" "}
-                    {item.likes}
-                  </span>
-                </div>
-              </div>
-              </>
-            );
-
-            return hasDetail ? (
-              <Link key={item.id} href={`/library/${item.id}`} className={cardClassName}>
-                {cardContent}
-              </Link>
-            ) : (
-              <div key={item.id} className={cardClassName}>
-                {cardContent}
-              </div>
+          {filters.map((filter) => {
+            const isMine = filter === MY_DECISIONS_FILTER;
+            const isActive = activeFilter === filter;
+            const className = isMine
+              ? `px-5 py-2 rounded-full text-label-md whitespace-nowrap transition-colors border ${
+                  isActive
+                    ? "bg-secondary-container text-on-secondary-container border-secondary/30"
+                    : "bg-secondary-container/40 text-secondary border-secondary/20 hover:bg-secondary-container/60"
+                }`
+              : `px-5 py-2 rounded-full text-label-md whitespace-nowrap transition-colors ${
+                  isActive
+                    ? "bg-primary text-on-primary"
+                    : "bg-white border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container"
+                }`;
+            return (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setActiveFilter(filter)}
+                className={className}
+              >
+                {filter}
+              </button>
             );
           })}
-          {visibleCases.length === 0 && (
-            <p className="col-span-full text-center text-on-surface-variant py-12">
-              조건에 맞는 사례가 아직 없습니다.
-            </p>
+        </section>
+
+        <div className="flex w-full -mt-4 !mb-3 justify-end">
+          <Link
+            href="/library/saved"
+            className="text-sm text-primary font-medium underline underline-offset-4 decoration-primary/30"
+          >
+            저장된 의사결정
+          </Link>
+        </div>
+
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 !mt-3">
+          {libraryError ? (
+            <LoadError className="col-span-full" onRetry={retryLibrary} />
+          ) : (
+            <>
+              {visibleCases.map((item) => (
+                <LibraryCaseCard
+                  key={item.id}
+                  item={item}
+                  hasDetail={Boolean(libraryCaseDetails[item.id])}
+                  saved={isSaved(item.id)}
+                  onToggleSave={toggleSaved}
+                  liked={isLiked(item.id)}
+                  onToggleLike={toggleLiked}
+                />
+              ))}
+              {visibleCases.length === 0 && (
+                <p className="col-span-full text-center text-on-surface-variant py-12">
+                  조건에 맞는 사례가 아직 없습니다.
+                </p>
+              )}
+            </>
           )}
         </section>
       </main>

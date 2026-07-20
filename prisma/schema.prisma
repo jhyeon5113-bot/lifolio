@@ -1,0 +1,466 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Auth.js (NextAuth v5) + Prisma adapter schema.
+// Account/Session/VerificationToken model names and fields are required
+// as-is by @auth/prisma-adapter. User carries a couple of extra
+// convenience columns (googleId) on top of the adapter's required fields.
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  googleId      String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts             Account[]
+  sessions             Session[]
+  decisions            Decision[]
+  decisionDnaSnapshots DecisionDnaSnapshot[]
+  decisionTraitProfile DecisionTraitProfile?
+  notifications        Notification[]
+  pushSubscriptions    PushSubscription[]
+  caseLikes            CaseLike[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Owned by the sibling `lifolio-collector` project. Declared here (via
+// `prisma db pull`) only so this schema matches the shared database and
+// `db push`/`migrate` never tries to drop them.
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model collected_articles {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String
+  url         String   @unique
+  source_name String
+  category    String
+  summary     String
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([category])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model decision_cases {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title              String
+  category           String
+  options            String[]
+  final_choice       String
+  criteria           String[]
+  expected_outcome   String
+  anxieties          String[]
+  actual_outcome     String
+  satisfaction       Int      @db.SmallInt
+  would_choose_again String
+  background         String
+  situation          String
+  outcome_gap        String
+  advice_for_others  String
+  source_url         String   @unique
+  source_name        String
+  dedupe_key         String   @unique
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([category])
+}
+
+// ---------------------------------------------------------------------------
+// Everything below this line is owned by Lifolio (PRD Part 6 & 7).
+// `decision_cases` above stays untouched — Lifolio reads/writes it directly
+// as the shared Case Library table (PRD "Case Data"), and supplements it
+// with `CaseProfile` below rather than adding columns to someone else's table.
+// ---------------------------------------------------------------------------
+
+enum DecisionLifecycleStatus {
+  IN_PROGRESS // consultation not yet fully structured
+  DECIDED // final choice + confidence saved, reflection pending
+  COMPLETED // reflection saved
+}
+
+// A single decision-making session (PRD Part 6 §4). Always retains the
+// user's raw free-text input alongside whatever AI structures out of it.
+model Decision {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  category String // "학업" | "진로" (free string, see schema review notes)
+  title    String // 고민 제목, e.g. "교환학생 vs 인턴"
+  rawInput String @db.Text // preserved verbatim, never overwritten by AI
+
+  background String?  @db.Text
+  situation  String?  @db.Text
+  criteria   String[] // 판단 기준
+  concerns   String[] // 불안 요소
+
+  currentPreference String? // option title the user leaned toward before seeing cases
+  finalChoice       String? // option title the user ultimately picked
+  confidence        Int? // 0~100
+
+  expectedReflectionDate DateTime?
+  status                 DecisionLifecycleStatus @default(IN_PROGRESS)
+  isPublic               Boolean                 @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  options    DecisionOption[]
+  // One-to-many as of the "다시 회고하기" feature — a COMPLETED decision can
+  // be re-reflected on any number of times. Only the first reflection flips
+  // status DECIDED→COMPLETED and queues the library submission draft; later
+  // ones don't (see app/api/decisions/[id]/reflection/route.ts).
+  reflections Reflection[]
+  libraryCaseSubmission LibraryCaseSubmission?
+  libraryCaseUpdates LibraryCaseUpdate[]
+  statusUpdates DecisionStatusUpdate[]
+  notifications Notification[]
+
+  @@index([userId, status])
+  // The daily notification job scans across ALL users by status (not
+  // scoped to one userId), so it needs status leading its own index —
+  // the [userId, status] one above doesn't serve that access pattern well.
+  @@index([status])
+}
+
+// One row per option the user was weighing (PRD Part 6 §4 ⑤⑧).
+model DecisionOption {
+  id         String   @id @default(cuid())
+  decisionId String
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  title            String
+  expectedPositive String? @db.Text // 기대하는 결과
+  expectedNegative String? @db.Text // 걱정하는 결과
+  sortOrder        Int     @default(0)
+
+  @@index([decisionId])
+}
+
+enum ReflectionChoice {
+  YES
+  NO
+  UNSURE
+}
+
+// Result recorded after the user revisits a decision (PRD Part 4 & 6 §5).
+// Expected values live on Decision/DecisionOption already, so this only
+// captures what actually happened.
+model Reflection {
+  id         String   @id @default(cuid())
+  decisionId String
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  actualResult     String           @db.Text
+  satisfaction     Int // 0~100
+  actualVsExpected String           @db.Text // "실제는 어땠는가" — feeds the AI comparison
+  wouldChooseAgain ReflectionChoice
+  chooseAgainReason String?         @db.Text // 왜 그 선택(다시 하겠다/안 하겠다)을 했는지 — distinct from `reason` below
+  reason           String?          @db.Text // 다른 사람을 위한 한마디 (adviceForOthers)
+
+  aiComparisonSummary String? @db.Text // AI-generated one-line expected-vs-actual summary
+  qualityScore        Int? // internal Reflection Quality Score, never shown to the user
+
+  actualReflectionDate DateTime @default(now()) // internal-only, per PRD Part 4 revision note
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  libraryCaseUpdate LibraryCaseUpdate?
+
+  @@index([decisionId, createdAt])
+}
+
+enum DecisionCheckInStatus {
+  ON_TRACK // 잘 진행되고 있어요
+  DIFFERENT // 예상과 조금 달라졌어요
+  WORRIED // 고민이 생겼어요
+  PAUSED // 잠시 멈춰두었어요
+  ALMOST_DONE // 거의 마무리됐어요
+}
+
+// A user-initiated "how's it going?" check-in for a DECIDED decision that's
+// still waiting on its reflection. Every check-in is kept (never
+// overwritten) so the full timeline can feed reports/analytics later — the
+// home page card only ever reads the latest one. Internal-only: never
+// surfaced to the public library.
+model DecisionStatusUpdate {
+  id         String                @id @default(cuid())
+  decisionId String
+  decision   Decision              @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  status     DecisionCheckInStatus
+  createdAt  DateTime              @default(now())
+
+  @@index([decisionId, createdAt])
+}
+
+// Derived-only analysis (PRD Part 5 & 6 §7) — never the data of record.
+// Can always be regenerated from completed Decision+Reflection rows.
+model DecisionDnaSnapshot {
+  id                     String   @id @default(cuid())
+  userId                 String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  level                  Int // 1~5
+  basedOnReflectionCount Int
+  insights               Json // level-specific cards; shape kept flexible on purpose
+  generatedAt            DateTime @default(now())
+
+  @@index([userId, generatedAt])
+}
+
+// Cumulative decision-making trait profile (PRD Part 6 §"결정 성향 프로필").
+// Unlike DecisionDnaSnapshot (Reflection-gated, level-gated), this starts
+// updating as soon as a single Decision is finalized. Each axis is an EMA
+// over every finalized decision so far — see lib/trait-repo.ts.
+model DecisionTraitProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  rational         Int @default(50) // 0~100, complementary with emotional
+  emotional        Int @default(50)
+  longTerm         Int @default(50) // 0~100, complementary with shortTerm
+  shortTerm        Int @default(50)
+  planned          Int @default(50) // 0~100, complementary with executionFocused
+  executionFocused Int @default(50)
+
+  decisionsAnalyzedCount Int      @default(0)
+  updatedAt              DateTime @updatedAt
+}
+
+enum LibrarySubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// A completed (reflection-done) Decision that's a candidate for the shared
+// Case Library, queued for admin review (PRD "관리자 검토") before it's
+// ever written into decision_cases. Draft fields are pre-filled from the
+// real Decision+Reflection at submission time, then editable by the admin
+// right up until approval — see lib/library-review-repo.ts.
+model LibraryCaseSubmission {
+  id         String                  @id @default(cuid())
+  decisionId String                  @unique
+  decision   Decision                @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  status     LibrarySubmissionStatus @default(PENDING)
+
+  title            String
+  category         String
+  background       String   @db.Text
+  situation        String   @db.Text
+  options          String[]
+  finalChoice      String
+  criteria         String[]
+  expectedOutcome  String   @db.Text
+  anxieties        String[]
+  actualOutcome    String   @db.Text
+  satisfaction     Int
+  wouldChooseAgain String // 'yes' | 'no' | 'depends' — decision_cases' own constrained vocabulary
+  chooseAgainReason String? @db.Text // published into CaseProfile.sameChoiceAgainText on approval
+  outcomeGap       String   @db.Text
+  adviceForOthers  String   @db.Text
+
+  subtitle       String @db.Text
+  detailTag      String
+  tags           String
+  authorInitials String
+
+  publishedCaseDedupeKey String? // set once APPROVED, points at the new decision_cases row
+  submittedAt            DateTime  @default(now())
+  reviewedAt              DateTime?
+}
+
+// A follow-up reflection ("다시 회고하기") on a Decision whose case is
+// already published — queued for admin review before its content gets
+// appended to the live public card's CaseProfile.followUpUpdates. Only
+// created when the decision's LibraryCaseSubmission is already APPROVED;
+// see app/api/decisions/[id]/reflection/route.ts.
+model LibraryCaseUpdate {
+  id           String     @id @default(cuid())
+  decisionId   String
+  decision     Decision   @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  reflectionId String     @unique
+  reflection   Reflection @relation(fields: [reflectionId], references: [id], onDelete: Cascade)
+
+  status LibrarySubmissionStatus @default(PENDING)
+
+  content          String @db.Text // admin-editable, prefilled from reflection.actualResult
+  monthsAfterLabel String // "1개월 후" etc, computed at creation time relative to decision.createdAt
+
+  submittedAt DateTime  @default(now())
+  reviewedAt  DateTime?
+}
+
+// Lifolio-side supplement for a `decision_cases` row. Holds both the AI
+// structuring enrichment (decision-profiles.json) and the library-card
+// display fields that don't belong in the shared table. `caseId` points at
+// `decision_cases.id` by convention only (no formal FK — different owners).
+model CaseProfile {
+  id     String @id @default(cuid())
+  caseId String @unique
+
+  subtitle            String @db.Text
+  detailTag           String
+  date                String
+  tags                String
+  steps               Json // [{ label, value, dotColor }] x4, card preview
+  authorInitials      String
+  authorAvatarColor   String
+  sameChoiceAgainText String? @db.Text // full sentence; decision_cases.would_choose_again only keeps yes/no/depends
+  optionPoints        Json? // per-option bullet points, when richer than the plain title (rare)
+  followUpUpdates     Json? // [{ label, text }] x N, appended as each LibraryCaseUpdate gets approved
+
+  normalizedSummary String?  @db.Text
+  decisionProfile   Json?
+  canonicalTags     String[]
+
+  // Real server-side engagement counters. Previously the UI showed a static
+  // "0" from here plus a per-browser localStorage increment — meaning likes
+  // from other real users never showed up anywhere. likeCount is a cached
+  // counter (kept in sync with CaseLike rows inside a transaction, see
+  // lib/case-engagement.ts) so the library grid doesn't need a COUNT query
+  // per card on every render.
+  viewCount Int @default(0)
+  likeCount Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  likes CaseLike[]
+}
+
+// One row per (user, case) like — lets a like be toggled on/off and stay
+// consistent across devices, unlike the old localStorage-only version.
+// FKs to CaseProfile.caseId (Lifolio-owned, safe to reference formally) —
+// NOT to decision_cases directly, since that table belongs to the sibling
+// lifolio-collector project and this schema avoids formal FKs across that
+// ownership boundary (see CaseProfile.caseId comment above).
+model CaseLike {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Matches CaseProfile.caseId's actual column type (plain text, no
+  // @db.Uuid) even though the values are UUID-shaped — CaseProfile.caseId
+  // itself isn't typed as Uuid, so the FK below requires the same type on
+  // both sides.
+  caseId String
+
+  caseProfile CaseProfile @relation(fields: [caseId], references: [caseId], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, caseId])
+  @@index([caseId])
+}
+
+enum NotificationType {
+  REFLECTION_DUE // ① a decision entered "회고 대기 중"
+  LIBRARY_PUBLISHED // ② admin approved the case into the public library
+  IN_PROGRESS_REMINDER // ③ IN_PROGRESS decision, +1일/+3일 nudge (fires twice)
+  STATUS_UPDATE_NUDGE // ④ DECIDED decision, only if the user has checked in before
+  FOLLOW_UP_REFLECTION // ⑤ COMPLETED decision, suggests reflecting again
+  REPORT_LEVEL_UP // ⑦ Decision DNA report crossed a new level threshold
+}
+
+// One row per notification, in-app AND push share this row — see
+// lib/notifications/*.ts. Time-based types (①③④⑤) are computed once daily
+// and queued into one of that day's 3 delivery slots (09:00/13:00/20:00
+// KST, see lib/notifications/schedule.ts); event-driven types (②⑦) are
+// created with scheduledSendAt = now and pushed immediately.
+model Notification {
+  id     String           @id @default(cuid())
+  userId String
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   NotificationType
+
+  title   String
+  body    String  @db.Text
+  linkUrl String? // where tapping the notification navigates to
+
+  // Present for every type except ⑦ (report level-up is user-level, not
+  // tied to one decision). Used both to build the link and, just as
+  // importantly, as the idempotency key so the daily job never double-books
+  // the same decision+type — see the "already exists?" checks in
+  // lib/notifications/compute.ts.
+  decisionId String?
+  decision   Decision? @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  scheduledSendAt DateTime // when this should actually reach the user
+  sentAt          DateTime? // set once the push has actually gone out
+  readAt          DateTime? // set once opened in the in-app notification list
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, sentAt])
+  // The delivery route polls "what's due right now and unsent" — this is
+  // its primary access path.
+  @@index([scheduledSendAt, sentAt])
+  // The daily compute job's idempotency checks are always scoped to one
+  // decision + one type.
+  @@index([decisionId, type])
+}
+
+// A browser's Web Push subscription (lib/push.ts sends to these). One user
+// can have several — one per browser/device they've granted permission on.
+model PushSubscription {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint  String  @unique @db.Text // long push-service URL, unique per browser subscription
+  p256dh    String  @db.Text
+  auth      String  @db.Text
+  userAgent String? // best-effort, for debugging which device a stale subscription belonged to
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
