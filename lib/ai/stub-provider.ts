@@ -19,8 +19,6 @@ import type {
   MissingInfoOutput,
   NormalizeTermInput,
   NormalizeTermOutput,
-  ReflectionAnalysisInput,
-  ReflectionAnalysisOutput,
   SimilarityExplanationInput,
   SimilarityExplanationOutput,
 } from "./types";
@@ -297,15 +295,6 @@ export const stubProvider: AIProvider = {
       return { reason: `비슷한 ${sharedConcern} 고민을 했던 사례입니다.` };
     }
     return { reason: "비슷한 상황에 있었던 사람의 경험입니다." };
-  },
-
-  async analyzeReflection(input: ReflectionAnalysisInput): Promise<ReflectionAnalysisOutput> {
-    if (!input.expectedPositive) {
-      return { summary: input.actualVsExpected.slice(0, 60) };
-    }
-    return {
-      summary: `처음에는 "${input.expectedPositive}"을(를) 가장 기대했지만, 실제로는 "${input.actualVsExpected.slice(0, 40)}"에서 만족을 얻었습니다.`,
-    };
   },
 
   async analyzeDecisionDnaLevel1(input: DecisionDnaInput): Promise<DecisionDnaLevel1Output> {

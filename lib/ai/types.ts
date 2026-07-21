@@ -98,21 +98,6 @@ export interface SimilarityExplanationOutput {
   reason: string;
 }
 
-// ── Role 5: Reflection Analysis ──────────────────────────────────────────
-// Compares what an option's DecisionOption row expected against what the
-// Reflection actually reported. Expected data is never re-asked for.
-
-export interface ReflectionAnalysisInput {
-  expectedPositive?: string | null;
-  expectedNegative?: string | null;
-  actualResult: string;
-  actualVsExpected: string;
-}
-
-export interface ReflectionAnalysisOutput {
-  summary: string;
-}
-
 // ── Role 6: Decision DNA Analysis (Level 1 only for MVP) ─────────────────
 // Only runs over Decisions that already have a completed Reflection.
 
@@ -176,7 +161,6 @@ export interface AIProvider {
   detectMissingInfo(input: MissingInfoInput): Promise<MissingInfoOutput>;
   normalizeTerm(input: NormalizeTermInput): Promise<NormalizeTermOutput>;
   explainSimilarity(input: SimilarityExplanationInput): Promise<SimilarityExplanationOutput>;
-  analyzeReflection(input: ReflectionAnalysisInput): Promise<ReflectionAnalysisOutput>;
   analyzeDecisionDnaLevel1(input: DecisionDnaInput): Promise<DecisionDnaLevel1Output>;
   analyzeDecisionTraits(input: DecisionTraitInput): Promise<DecisionTraitOutput>;
 }

@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getAIProvider } from "@/lib/ai";
 import { createSubmissionDraft, createLibraryCaseUpdateDraft } from "@/lib/library-review-repo";
 import { getMonthsAfterLabel } from "@/lib/reflection-timeline-data";
 import { clamp } from "@/lib/clamp";
-import { withTimeout } from "@/lib/with-timeout";
 import { LEVEL_1_REFLECTION_THRESHOLD } from "@/lib/dna-repo";
 import { notifyNow } from "@/lib/notifications/create";
 import { reportLevelUpContent } from "@/lib/notifications/content";
@@ -57,26 +55,6 @@ export async function POST(
     typeof body.chooseAgainReason === "string" && body.chooseAgainReason.trim() ? body.chooseAgainReason : undefined;
   const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason : undefined;
 
-  // The AI summary is a nice-to-have on top of the reflection, not a
-  // precondition for saving it — a slow/failed AI call should never cost
-  // the user their just-written reflection.
-  const chosenOption = decision.options.find((option) => option.title === decision.finalChoice);
-  let summary: string | undefined;
-  try {
-    ({ summary } = await withTimeout(
-      getAIProvider().analyzeReflection({
-        expectedPositive: chosenOption?.expectedPositive,
-        expectedNegative: chosenOption?.expectedNegative,
-        actualResult,
-        actualVsExpected,
-      }),
-      15_000,
-      "AI reflection analysis",
-    ));
-  } catch {
-    summary = undefined;
-  }
-
   // Only the very first reflection flips the decision COMPLETED and queues
   // a library-card draft — follow-up reflections ("다시 회고하기") just add
   // another row to the timeline.
@@ -92,7 +70,6 @@ export async function POST(
         wouldChooseAgain,
         chooseAgainReason,
         reason,
-        aiComparisonSummary: summary,
       },
     }),
     ...(isFirstReflection

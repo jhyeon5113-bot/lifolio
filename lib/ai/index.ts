@@ -26,8 +26,6 @@ export type {
   MissingInfoQuestion,
   NormalizeTermInput,
   NormalizeTermOutput,
-  ReflectionAnalysisInput,
-  ReflectionAnalysisOutput,
   SimilarityExplanationInput,
   SimilarityExplanationOutput,
   StructuredField,
