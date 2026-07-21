@@ -25,7 +25,7 @@ export default async function LibraryCaseDetailPage({
   return (
     <>
       <RecordCaseView id={id} />
-      <Header showSearch />
+      <Header />
       <main className="pt-24 pb-8 px-4 md:px-grid-margin max-w-4xl mx-auto space-y-8">
         <Link
           href={backHref}

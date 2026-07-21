@@ -26,6 +26,7 @@ export default function HistoryPage() {
   const [attempt, setAttempt] = useState(0);
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
   const [range, setRange] = useState<DateRange | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -52,22 +53,25 @@ export default function HistoryPage() {
     return [ALL_CATEGORY, ...distinct];
   }, [entries]);
 
-  const visibleEntries = useMemo(
-    () =>
-      entries.filter((entry) => {
-        if (activeCategory !== ALL_CATEGORY && entry.category !== activeCategory) return false;
-        if (range) {
-          const entryDate = new Date(entry.createdAt);
-          if (entryDate < range.from || entryDate > endOfDay(range.to)) return false;
-        }
-        return true;
-      }),
-    [entries, activeCategory, range],
-  );
+  const visibleEntries = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return entries.filter((entry) => {
+      if (activeCategory !== ALL_CATEGORY && entry.category !== activeCategory) return false;
+      if (range) {
+        const entryDate = new Date(entry.createdAt);
+        if (entryDate < range.from || entryDate > endOfDay(range.to)) return false;
+      }
+      if (normalizedQuery) {
+        const haystack = `${entry.title} ${entry.situation} ${entry.background} ${entry.finalChoice}`.toLowerCase();
+        if (!haystack.includes(normalizedQuery)) return false;
+      }
+      return true;
+    });
+  }, [entries, activeCategory, range, searchQuery]);
 
   return (
     <>
-      <Header showSearch />
+      <Header showSearch onSearchChange={setSearchQuery} searchPlaceholder="결정 검색" />
       <main className="pt-24 px-gutter max-w-container-max mx-auto">
         <section className="mb-12">
           <h2 className="text-headline-lg text-primary mb-2">

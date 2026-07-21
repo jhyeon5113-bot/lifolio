@@ -8,7 +8,15 @@ import { currentUser } from "@/lib/mock-data";
 import { isAdminEmail } from "@/lib/admin";
 import { NotificationBell } from "@/components/NotificationBell";
 
-export function Header({ showSearch = false }: { showSearch?: boolean }) {
+export function Header({
+  showSearch = false,
+  onSearchChange,
+  searchPlaceholder = "검색",
+}: {
+  showSearch?: boolean;
+  onSearchChange?: (query: string) => void;
+  searchPlaceholder?: string;
+}) {
   const { data: session } = useSession();
   const avatarUrl = session?.user?.image ?? currentUser.avatarUrl;
   const userName = session?.user?.name ?? currentUser.name;
@@ -16,6 +24,14 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    onSearchChange?.("");
+  };
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -39,6 +55,40 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [accountMenuOpen]);
+
+  if (showSearch && searchOpen) {
+    return (
+      <header className="fixed top-0 left-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-[0_40px_40px_rgba(0,6,102,0.06)]">
+        <div className="flex items-center gap-2 px-gutter h-16 w-full max-w-container-max mx-auto">
+          <span className="material-symbols-outlined text-on-surface-variant">
+            search
+          </span>
+          <input
+            autoFocus
+            type="text"
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              onSearchChange?.(event.target.value);
+            }}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            className="flex-1 bg-transparent text-body-md text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={closeSearch}
+            aria-label="검색 닫기"
+            className="p-2 rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200"
+          >
+            <span className="material-symbols-outlined text-on-surface-variant">
+              close
+            </span>
+          </button>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="fixed top-0 left-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-[0_40px_40px_rgba(0,6,102,0.06)]">
@@ -105,6 +155,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           {showSearch && (
             <button
               type="button"
+              onClick={() => setSearchOpen(true)}
               className="p-2 rounded-full hover:bg-surface-container-high/50 transition-colors active:scale-95 duration-200"
               aria-label="검색"
             >
