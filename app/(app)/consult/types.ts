@@ -4,6 +4,11 @@ import type { OptionExpectation } from "@/components/consult/OptionExpectationsF
 
 export interface StructuredDraft {
   category: DecisionCategory;
+  // Written once by structureDecision when the consult starts and never
+  // regenerated — carried on the draft (rather than a separate fetch) so
+  // it's still around whenever the loop finally reaches the summary step,
+  // however many turns later that is.
+  summary: string;
   background: string;
   situation: string;
   options: string[];

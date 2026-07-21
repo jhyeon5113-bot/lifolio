@@ -50,6 +50,7 @@ export async function POST(request: Request) {
   const criteria = asStringArray(body.criteria);
   const concerns = asStringArray(body.concerns);
   const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : undefined;
+  const summary = typeof body.summary === "string" && body.summary.trim() ? body.summary.trim() : undefined;
 
   if (!rawInput.trim()) {
     return NextResponse.json({ error: "rawInput is required" }, { status: 400 });
@@ -60,6 +61,7 @@ export async function POST(request: Request) {
       userId: session.user.id,
       category,
       title: title ?? deriveTitle(options, situation, rawInput),
+      summary,
       rawInput,
       background,
       situation,

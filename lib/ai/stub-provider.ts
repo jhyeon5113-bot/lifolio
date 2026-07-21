@@ -13,8 +13,6 @@ import type {
   DecisionDnaLevel1Output,
   DecisionStructureInput,
   DecisionStructureOutput,
-  DecisionSummaryInput,
-  DecisionSummaryOutput,
   DecisionTraitInput,
   DecisionTraitOutput,
   MissingInfoInput,
@@ -170,6 +168,58 @@ function guessTitle({
   return truncateTitle(core ? `${core} 고민` : "제목 없는 고민");
 }
 
+// A short "yes, that's my situation" confirmation for the top of
+// SummaryCard — same structured inputs as guessTitle, phrased as a
+// sentence instead of a short phrase. Deliberately doesn't add
+// interpretation the patterns below can't actually find in the text; a
+// real provider would compress this far better from its own understanding
+// of the (by then fully) structured draft.
+function guessSummary({
+  situation,
+  background,
+  options,
+}: Pick<DecisionStructureOutput, "situation" | "background" | "options">): string {
+  if (options.length >= 2) {
+    return `${withParticle(options[0], "과", "와")} ${options[1]} 사이에서 고민하고 있습니다.`;
+  }
+
+  const text = (situation || background).trim().replace(/[.!?]+$/, "");
+  if (!text) return "아직 고민이 구체적으로 정리되지 않았어요.";
+
+  const because = text.match(/^(.+?)\s*때문에\s*(.+?)(?:을|를)?\s*(?:할지)?\s*고민/);
+  if (because) {
+    const reason = because[1].trim();
+    const choice = because[2].trim();
+    if (reason && choice) {
+      return `${withParticle(reason, "을", "를")} 위해 ${choice} 여부를 고민하고 있습니다.`;
+    }
+  }
+
+  const comparison =
+    text.match(/^(.+?)(?:와|과)\s*(.+?)\s*중\s*(?:어디|뭐|무엇)/) ??
+    text.match(/^(.+?)\s*(?:vs\.?|또는)\s*(.+?)(?:\s*중|\s*사이|$)/);
+  if (comparison) {
+    const a = comparison[1].trim();
+    const b = comparison[2].trim();
+    if (a && b) {
+      return `${withParticle(a, "과", "와")} ${b} 사이에서 고민하고 있습니다.`;
+    }
+  }
+
+  if ((text.match(/할지/g) ?? []).length === 1) {
+    const single = text.match(/^(.+?)(?:을|를)\s*(.+?)할지\s*고민/);
+    if (single) {
+      const subject = single[1].trim();
+      const verb = single[2].trim();
+      if (subject && verb) {
+        return `${subject} ${verb} 여부를 고민하고 있습니다.`;
+      }
+    }
+  }
+
+  return `${text}는 상황이시군요.`;
+}
+
 export const stubProvider: AIProvider = {
   async structureDecision({ rawInput }: DecisionStructureInput): Promise<DecisionStructureOutput> {
     const background = "";
@@ -177,6 +227,7 @@ export const stubProvider: AIProvider = {
     const options = guessOptions(rawInput);
     return {
       title: guessTitle({ situation, background, options }),
+      summary: guessSummary({ situation, background, options }),
       category: guessCategory(rawInput),
       background,
       situation,
@@ -228,21 +279,6 @@ export const stubProvider: AIProvider = {
     }
 
     return null;
-  },
-
-  async summarizeDecision(input: DecisionSummaryInput): Promise<DecisionSummaryOutput> {
-    const optionsText =
-      input.options.length >= 2 ? input.options.join(" 또는 ") : (input.options[0] ?? "");
-    const criteriaText =
-      input.criteria.length > 0 ? `${input.criteria.join(", ")}을(를) 가장 중요하게 생각하고 계시고, ` : "";
-    const concernsText =
-      input.concerns.length > 0 ? `${input.concerns.join(", ")}이(가) 가장 걱정되는 부분이시네요.` : "";
-
-    const summary = `${input.situation} ${optionsText} 사이에서 고민하고 계시는군요. ${criteriaText}${concernsText}`
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return { summary };
   },
 
   async normalizeTerm({ term }: NormalizeTermInput): Promise<NormalizeTermOutput> {

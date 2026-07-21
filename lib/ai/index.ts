@@ -19,8 +19,6 @@ export type {
   DecisionDnaLevel1Output,
   DecisionStructureInput,
   DecisionStructureOutput,
-  DecisionSummaryInput,
-  DecisionSummaryOutput,
   DecisionTraitInput,
   DecisionTraitOutput,
   MissingInfoInput,

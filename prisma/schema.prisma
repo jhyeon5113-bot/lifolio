@@ -135,6 +135,7 @@ model Decision {
 
   category String // "학업" | "진로" (free string, see schema review notes)
   title    String // 고민 제목, e.g. "교환학생 vs 인턴"
+  summary  String?  @db.Text // structureDecision's confirmation paraphrase — shown atop SummaryCard, persisted so resuming an in-progress consult doesn't need a second AI call to redisplay it
   rawInput String @db.Text // preserved verbatim, never overwritten by AI
 
   background String?  @db.Text

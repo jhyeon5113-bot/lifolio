@@ -11,12 +11,21 @@ export type DecisionCategory = "진로/취업" | "학업/전공" | "창업/도�
 
 // ── Role 1: Decision Structuring ────────────────────────────────────────
 // Free text in, skeleton out. Never invents details the user didn't write.
-// title rides along in this same call rather than a separate one — a real
-// provider can write both from one completion; the rule-based stub just
-// approximates title from whatever it could parse out of rawInput. Card
-// lists (history/home) show this title, so it should read as a short,
-// natural Korean phrase (15-30 chars) that makes the decision recognizable
-// at a glance — not a truncated copy of the user's raw sentence.
+// title and summary both ride along in this same call rather than separate
+// ones — a real provider can write all three from one completion; the
+// rule-based stub approximates them from whatever it could parse out of
+// rawInput (criteria/concerns don't exist yet at this point either way).
+//
+// title: card lists (history/home) show this, so it should read as a
+// short, natural Korean phrase (15-30 chars) that makes the decision
+// recognizable at a glance — not a truncated copy of the raw sentence.
+//
+// summary: shown atop SummaryCard once the structuring loop closes. A
+// 2-3 sentence confirmation the user should read and think "yes, that's
+// my situation" — never new interpretation or advice, and only there to
+// set up the similar-cases list that follows it. Persisted on Decision
+// (see prisma/schema.prisma) so resuming an in-progress consult can
+// redisplay it without a second AI call.
 
 export interface DecisionStructureInput {
   rawInput: string;
@@ -24,30 +33,13 @@ export interface DecisionStructureInput {
 
 export interface DecisionStructureOutput {
   title: string;
+  summary: string;
   category?: DecisionCategory;
   background: string;
   situation: string;
   options: string[];
   criteria: string[];
   concerns: string[];
-}
-
-// ── Role 1b: Decision Summary ────────────────────────────────────────────
-// Runs once, right after the structuring loop closes (every field filled).
-// Turns the structured draft into one readable paragraph the user actually
-// sees — distinct from Role 1, which only produces the internal skeleton.
-
-export interface DecisionSummaryInput {
-  category: string;
-  background: string;
-  situation: string;
-  options: string[];
-  criteria: string[];
-  concerns: string[];
-}
-
-export interface DecisionSummaryOutput {
-  summary: string;
 }
 
 // ── Role 2: Missing Information Detection ───────────────────────────────
@@ -181,7 +173,6 @@ export interface DecisionTraitOutput {
 
 export interface AIProvider {
   structureDecision(input: DecisionStructureInput): Promise<DecisionStructureOutput>;
-  summarizeDecision(input: DecisionSummaryInput): Promise<DecisionSummaryOutput>;
   detectMissingInfo(input: MissingInfoInput): Promise<MissingInfoOutput>;
   normalizeTerm(input: NormalizeTermInput): Promise<NormalizeTermOutput>;
   explainSimilarity(input: SimilarityExplanationInput): Promise<SimilarityExplanationOutput>;

@@ -32,6 +32,7 @@ function toISODate(date: Date): string {
 
 const DEFAULT_DRAFT: StructuredDraft = {
   category: "학업/전공",
+  summary: "",
   background: "",
   situation: "",
   options: [],
@@ -43,6 +44,7 @@ interface FetchedDecision {
   id: string;
   category: string;
   rawInput: string;
+  summary: string | null;
   background: string | null;
   situation: string | null;
   criteria: string[];
@@ -152,26 +154,18 @@ function ConsultContent() {
     pushMessage({ id: typingId, role: "ai", kind: "typing" });
 
     try {
-      const [summaryRes, matchesRes] = await Promise.all([
-        fetchWithTimeout("/api/ai/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(currentDraft),
+      const matchesRes = await fetchWithTimeout("/api/cases/similar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: currentDraft.category,
+          criteria: currentDraft.criteria,
+          concerns: currentDraft.concerns,
+          background: currentDraft.background,
+          situation: currentDraft.situation,
         }),
-        fetchWithTimeout("/api/cases/similar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            category: currentDraft.category,
-            criteria: currentDraft.criteria,
-            concerns: currentDraft.concerns,
-            background: currentDraft.background,
-            situation: currentDraft.situation,
-          }),
-        }),
-      ]);
-      if (!summaryRes.ok || !matchesRes.ok) throw new Error("summary step failed");
-      const { summary } = await summaryRes.json();
+      });
+      if (!matchesRes.ok) throw new Error("summary step failed");
       const matches = await matchesRes.json();
 
       removeMessage(typingId);
@@ -179,7 +173,7 @@ function ConsultContent() {
         id: nextId(),
         role: "ai",
         kind: "summary",
-        summary,
+        summary: currentDraft.summary,
         options: currentDraft.options,
         matches,
         locked: false,
@@ -217,6 +211,7 @@ function ConsultContent() {
         const structured = await structureRes.json();
         const newDraft: StructuredDraft = {
           category: structured.category ?? DEFAULT_DRAFT.category,
+          summary: structured.summary ?? "",
           background: structured.background ?? "",
           situation: structured.situation ?? "",
           options: structured.options ?? [],
@@ -425,6 +420,10 @@ function ConsultContent() {
   const resumeFromDecision = async (fetched: FetchedDecision) => {
     const known: StructuredDraft = {
       category: (fetched.category as StructuredDraft["category"]) || DEFAULT_DRAFT.category,
+      // Older decisions created before this column existed never got a
+      // summary written — fall back to situation (always set) rather than
+      // ever showing a blank paragraph atop the resumed SummaryCard.
+      summary: fetched.summary || fetched.situation || "",
       background: fetched.background ?? "",
       situation: fetched.situation ?? "",
       options: fetched.options.map((o) => o.title),
@@ -545,26 +544,18 @@ function ConsultContent() {
     const typingId = nextId();
     pushMessage({ id: typingId, role: "ai", kind: "typing" });
     try {
-      const [summaryRes, matchesRes] = await Promise.all([
-        fetchWithTimeout("/api/ai/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(known),
+      const matchesRes = await fetchWithTimeout("/api/cases/similar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: known.category,
+          criteria: known.criteria,
+          concerns: known.concerns,
+          background: known.background,
+          situation: known.situation,
         }),
-        fetchWithTimeout("/api/cases/similar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            category: known.category,
-            criteria: known.criteria,
-            concerns: known.concerns,
-            background: known.background,
-            situation: known.situation,
-          }),
-        }),
-      ]);
-      if (!summaryRes.ok || !matchesRes.ok) throw new Error("summary regen failed");
-      const { summary } = await summaryRes.json();
+      });
+      if (!matchesRes.ok) throw new Error("summary regen failed");
       const matches = await matchesRes.json();
       removeMessage(typingId);
 
@@ -573,7 +564,7 @@ function ConsultContent() {
           id: nextId(),
           role: "ai",
           kind: "summary",
-          summary,
+          summary: known.summary,
           options: known.options,
           matches,
           chosen: fetched.finalChoice,
@@ -594,7 +585,15 @@ function ConsultContent() {
           setPhase("reflectionDate");
         }
       } else {
-        pushMessage({ id: nextId(), role: "ai", kind: "summary", summary, options: known.options, matches, locked: false });
+        pushMessage({
+          id: nextId(),
+          role: "ai",
+          kind: "summary",
+          summary: known.summary,
+          options: known.options,
+          matches,
+          locked: false,
+        });
         setPhase("summary");
       }
     } catch {
