@@ -108,15 +108,25 @@ function truncateTitle(text: string, max = 30): string {
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
-// Best-effort, pattern-matched title from the user's first message alone —
-// this is what a real provider's structureDecision call would write far
-// more generally in the same response; here it's just a handful of common
-// Korean phrasings (reason→choice, A/B comparison, single-option "할지"),
-// falling back to a cleaned-up version of the sentence itself rather than
-// ever inventing content it didn't find. Never sees background/criteria/
-// concerns — those don't exist yet at structuring time.
-function guessTitle(rawInput: string): string {
-  const text = rawInput.trim().replace(/[.!?]+$/, "");
+// Best-effort title built from what structureDecision already structured
+// in this same call — never re-parses the user's raw free text on its
+// own. Only situation/background reliably have content at structuring
+// time (criteria/concerns don't exist yet), so the text patterns below
+// still read from those, not from rawInput directly; a real provider
+// would instead write title from its own full understanding of the
+// structured draft.
+function guessTitle({
+  situation,
+  background,
+  options,
+}: Pick<DecisionStructureOutput, "situation" | "background" | "options">): string {
+  // options is already structured data (not re-derived from text here) —
+  // when structuring already found a clean 2-way split, prefer it outright.
+  if (options.length >= 2) {
+    return truncateTitle(`${withParticle(options[0], "과", "와")} ${options[1]} 선택`);
+  }
+
+  const text = (situation || background).trim().replace(/[.!?]+$/, "");
   if (!text) return "제목 없는 고민";
 
   const because = text.match(/^(.+?)\s*때문에\s*(.+?)(?:을|를)?\s*(?:할지)?\s*고민/);
@@ -128,6 +138,8 @@ function guessTitle(rawInput: string): string {
     }
   }
 
+  // options didn't structure cleanly (e.g. "A와 B 중" phrasing guessOptions
+  // doesn't catch) — try the same comparison shape directly on the text.
   const comparison =
     text.match(/^(.+?)(?:와|과)\s*(.+?)\s*중\s*(?:어디|뭐|무엇)/) ??
     text.match(/^(.+?)\s*(?:vs\.?|또는)\s*(.+?)(?:\s*중|\s*사이|$)/);
@@ -160,12 +172,15 @@ function guessTitle(rawInput: string): string {
 
 export const stubProvider: AIProvider = {
   async structureDecision({ rawInput }: DecisionStructureInput): Promise<DecisionStructureOutput> {
+    const background = "";
+    const situation = rawInput.trim();
+    const options = guessOptions(rawInput);
     return {
-      title: guessTitle(rawInput),
+      title: guessTitle({ situation, background, options }),
       category: guessCategory(rawInput),
-      background: "",
-      situation: rawInput.trim(),
-      options: guessOptions(rawInput),
+      background,
+      situation,
+      options,
       criteria: [],
       concerns: [],
     };
