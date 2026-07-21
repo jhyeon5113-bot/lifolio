@@ -17,8 +17,6 @@ import type {
   DecisionSummaryOutput,
   DecisionTraitInput,
   DecisionTraitOutput,
-  GenerateTitleInput,
-  GenerateTitleOutput,
   MissingInfoInput,
   MissingInfoOutput,
   NormalizeTermInput,
@@ -90,9 +88,80 @@ function guessOptions(text: string): string[] {
   return [];
 }
 
+// True if the syllable block this string ends on has a final consonant
+// (받침) — e.g. "휴학" → true, "취업 준비" → false (ends on "비"). Only
+// meaningful for a single trailing Hangul syllable; non-Hangul input (or
+// nothing) just reads as "no batchim".
+function hasBatchim(text: string): boolean {
+  const lastChar = text.trim().slice(-1);
+  const code = lastChar.charCodeAt(0);
+  if (code < 0xac00 || code > 0xd7a3) return false;
+  return (code - 0xac00) % 28 !== 0;
+}
+
+function withParticle(text: string, withBatchim: string, withoutBatchim: string): string {
+  return `${text}${hasBatchim(text) ? withBatchim : withoutBatchim}`;
+}
+
+function truncateTitle(text: string, max = 30): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+// Best-effort, pattern-matched title from the user's first message alone —
+// this is what a real provider's structureDecision call would write far
+// more generally in the same response; here it's just a handful of common
+// Korean phrasings (reason→choice, A/B comparison, single-option "할지"),
+// falling back to a cleaned-up version of the sentence itself rather than
+// ever inventing content it didn't find. Never sees background/criteria/
+// concerns — those don't exist yet at structuring time.
+function guessTitle(rawInput: string): string {
+  const text = rawInput.trim().replace(/[.!?]+$/, "");
+  if (!text) return "제목 없는 고민";
+
+  const because = text.match(/^(.+?)\s*때문에\s*(.+?)(?:을|를)?\s*(?:할지)?\s*고민/);
+  if (because) {
+    const reason = because[1].trim();
+    const choice = because[2].trim();
+    if (reason && choice) {
+      return truncateTitle(`${withParticle(reason, "을", "를")} 위한 ${choice} 고민`);
+    }
+  }
+
+  const comparison =
+    text.match(/^(.+?)(?:와|과)\s*(.+?)\s*중\s*(?:어디|뭐|무엇)/) ??
+    text.match(/^(.+?)\s*(?:vs\.?|또는)\s*(.+?)(?:\s*중|\s*사이|$)/);
+  if (comparison) {
+    const a = comparison[1].trim();
+    const b = comparison[2].trim();
+    if (a && b) {
+      return truncateTitle(`${withParticle(a, "과", "와")} ${b} 선택`);
+    }
+  }
+
+  // Only for a single "~할지" clause — two or more (e.g. "A할지 B할지 고민")
+  // read as a real comparison, and this pattern would garble that shape
+  // rather than represent it, so it's left to the generic fallback below.
+  if ((text.match(/할지/g) ?? []).length === 1) {
+    const single = text.match(/^(.+?)(?:을|를)\s*(.+?)할지\s*고민/);
+    if (single) {
+      const subject = single[1].trim();
+      const verb = single[2].trim();
+      if (subject && verb) {
+        return truncateTitle(`${subject} ${verb} 여부`);
+      }
+    }
+  }
+
+  const generic = text.match(/^(.+?)\s*(?:이|가)?\s*고민(?:\s*중이에요|\s*이에요|\s*입니다|\s*이야|\s*돼요|\s*중입니다)?$/);
+  const core = generic ? generic[1].trim() : text;
+  return truncateTitle(core ? `${core} 고민` : "제목 없는 고민");
+}
+
 export const stubProvider: AIProvider = {
   async structureDecision({ rawInput }: DecisionStructureInput): Promise<DecisionStructureOutput> {
     return {
+      title: guessTitle(rawInput),
       category: guessCategory(rawInput),
       background: "",
       situation: rawInput.trim(),
@@ -159,15 +228,6 @@ export const stubProvider: AIProvider = {
       .trim();
 
     return { summary };
-  },
-
-  async generateTitle(input: GenerateTitleInput): Promise<GenerateTitleOutput> {
-    if (input.options.length >= 2) {
-      return { title: `${input.options[0]} vs ${input.options[1]}` };
-    }
-    const fallback = input.situation.trim() || input.background.trim() || input.options[0] || "";
-    const title = fallback.length > 30 ? `${fallback.slice(0, 30)}…` : fallback;
-    return { title: title || "제목 없는 고민" };
   },
 
   async normalizeTerm({ term }: NormalizeTermInput): Promise<NormalizeTermOutput> {

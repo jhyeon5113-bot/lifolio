@@ -11,12 +11,19 @@ export type DecisionCategory = "진로/취업" | "학업/전공" | "창업/도�
 
 // ── Role 1: Decision Structuring ────────────────────────────────────────
 // Free text in, skeleton out. Never invents details the user didn't write.
+// title rides along in this same call rather than a separate one — a real
+// provider can write both from one completion; the rule-based stub just
+// approximates title from whatever it could parse out of rawInput. Card
+// lists (history/home) show this title, so it should read as a short,
+// natural Korean phrase (15-30 chars) that makes the decision recognizable
+// at a glance — not a truncated copy of the user's raw sentence.
 
 export interface DecisionStructureInput {
   rawInput: string;
 }
 
 export interface DecisionStructureOutput {
+  title: string;
   category?: DecisionCategory;
   background: string;
   situation: string;
@@ -41,28 +48,6 @@ export interface DecisionSummaryInput {
 
 export interface DecisionSummaryOutput {
   summary: string;
-}
-
-// ── Role 1c: Decision Title ──────────────────────────────────────────────
-// Also runs once, alongside Role 1b, once the structuring loop closes.
-// Distinct from the placeholder title Decision.create() sets from the raw
-// first message (see deriveTitle in app/api/decisions/route.ts) — that one
-// only ever sees whatever the structuring step extracted from a single
-// message, often before options/criteria exist yet. This role re-titles
-// the decision from the complete draft, so "vs" comparisons and short
-// paraphrases are only ever built from real, final data.
-
-export interface GenerateTitleInput {
-  category: string;
-  background: string;
-  situation: string;
-  options: string[];
-  criteria: string[];
-  concerns: string[];
-}
-
-export interface GenerateTitleOutput {
-  title: string;
 }
 
 // ── Role 2: Missing Information Detection ───────────────────────────────
@@ -197,7 +182,6 @@ export interface DecisionTraitOutput {
 export interface AIProvider {
   structureDecision(input: DecisionStructureInput): Promise<DecisionStructureOutput>;
   summarizeDecision(input: DecisionSummaryInput): Promise<DecisionSummaryOutput>;
-  generateTitle(input: GenerateTitleInput): Promise<GenerateTitleOutput>;
   detectMissingInfo(input: MissingInfoInput): Promise<MissingInfoOutput>;
   normalizeTerm(input: NormalizeTermInput): Promise<NormalizeTermOutput>;
   explainSimilarity(input: SimilarityExplanationInput): Promise<SimilarityExplanationOutput>;

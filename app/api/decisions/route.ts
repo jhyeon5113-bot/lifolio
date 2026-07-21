@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { getHistoryEntries } from "@/lib/history-data";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
+// Defensive fallback only — the real title comes from structureDecision's
+// `title` field (see lib/ai/types.ts) and is passed straight through by the
+// consult flow. This just guards against a caller that skips that step.
 function deriveTitle(options: string[], situation: string, rawInput: string): string {
   if (options.length >= 2) return `${options[0]} vs ${options[1]}`;
   const fallback = situation.trim() || rawInput.trim();
@@ -46,6 +49,7 @@ export async function POST(request: Request) {
   const options = asStringArray(body.options);
   const criteria = asStringArray(body.criteria);
   const concerns = asStringArray(body.concerns);
+  const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : undefined;
 
   if (!rawInput.trim()) {
     return NextResponse.json({ error: "rawInput is required" }, { status: 400 });
@@ -55,7 +59,7 @@ export async function POST(request: Request) {
     data: {
       userId: session.user.id,
       category,
-      title: deriveTitle(options, situation, rawInput),
+      title: title ?? deriveTitle(options, situation, rawInput),
       rawInput,
       background,
       situation,
