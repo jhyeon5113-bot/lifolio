@@ -464,3 +464,17 @@ model PushSubscription {
 
   @@index([userId])
 }
+
+// Backs lib/rateLimit.ts's sliding-window limiter — one row per request
+// that counted against some limit. No separate Redis/Upstash needed; the
+// app is small enough that a few extra indexed rows/queries per rate-limited
+// request is negligible, and this avoids a whole new external dependency.
+// Rows outside their own window get opportunistically deleted by the same
+// check that reads them, so this table stays small in practice.
+model RateLimitHit {
+  id        String   @id @default(cuid())
+  key       String // e.g. "user:<id>:route:/api/decisions"
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getHistoryEntries } from "@/lib/history-data";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 function deriveTitle(options: string[], situation: string, rawInput: string): string {
   if (options.length >= 2) return `${options[0]} vs ${options[1]}`;
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // 30/hour — generous for real usage (a handful of new consult sessions a
+  // day), tight enough to stop a runaway loop from flooding the DB.
+  const rateLimit = await checkRateLimit(`user:${session.user.id}:route:POST:/api/decisions`, 30, 60 * 60 * 1000);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
 
   let body: Record<string, unknown>;
   try {

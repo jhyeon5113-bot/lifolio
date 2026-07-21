@@ -9,6 +9,7 @@ import { withTimeout } from "@/lib/withTimeout";
 import { LEVEL_1_REFLECTION_THRESHOLD } from "@/lib/dna-repo";
 import { notifyNow } from "@/lib/notifications/create";
 import { reportLevelUpContent } from "@/lib/notifications/content";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 export async function POST(
   request: Request,
@@ -18,6 +19,13 @@ export async function POST(
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const rateLimit = await checkRateLimit(
+    `user:${session.user.id}:route:POST:/api/decisions/reflection`,
+    20,
+    60 * 60 * 1000,
+  );
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
 
   const { id } = await params;
   const decision = await prisma.decision.findUnique({

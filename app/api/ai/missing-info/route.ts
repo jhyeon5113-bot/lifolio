@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAIProvider } from "@/lib/ai";
 import { withTimeout } from "@/lib/withTimeout";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Higher limit than the other AI routes — this one legitimately fires
+  // several times per consult session (once per missing field).
+  const rateLimit = await checkRateLimit(`user:${session.user.id}:route:POST:/api/ai/missing-info`, 60, 60 * 60 * 1000);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
 
   let body: Record<string, unknown>;
   try {

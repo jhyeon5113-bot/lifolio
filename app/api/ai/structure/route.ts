@@ -2,12 +2,19 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAIProvider } from "@/lib/ai";
 import { withTimeout } from "@/lib/withTimeout";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // AI calls cost money once a real provider is connected — limit is
+  // deliberately tighter than the other AI routes since this only fires
+  // once per new decision in normal usage.
+  const rateLimit = await checkRateLimit(`user:${session.user.id}:route:POST:/api/ai/structure`, 20, 60 * 60 * 1000);
+  if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
 
   let body: Record<string, unknown>;
   try {
