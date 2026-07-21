@@ -2,12 +2,14 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../lib/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../lib/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 // Auth.js (NextAuth v5) + Prisma adapter schema.
@@ -375,7 +377,8 @@ model CaseProfile {
 
   createdAt DateTime @default(now())
 
-  likes CaseLike[]
+  likes     CaseLike[]
+  embedding CaseEmbedding?
 }
 
 // One row per (user, case) like — lets a like be toggled on/off and stay
@@ -400,6 +403,34 @@ model CaseLike {
 
   @@unique([userId, caseId])
   @@index([caseId])
+}
+
+// Semantic-search embedding for one library case's *pre-decision* structured
+// content only (title/category/background/situation/options/criteria/
+// concerns) — reflection/outcome fields (satisfaction, actual_outcome, etc.)
+// are never part of the embedded text, since recommendations must reflect
+// the situation before a choice was made, not how it turned out.
+//
+// Kept as its own table rather than a column on CaseProfile so a future
+// embedding-provider or dimension change is just "truncate and refill this
+// table" — never a risk to CaseProfile's other columns. FKs to
+// CaseProfile.caseId, not decision_cases, for the same cross-project
+// ownership reason as CaseLike above.
+//
+// vector(1536) matches OpenAI's text-embedding-3-small as a placeholder —
+// no embedding provider is chosen yet (see lib/embedding/). pgvector
+// requires a fixed dimension per column, so switching to a model with a
+// different output size later means an actual migration here, not just a
+// config change.
+model CaseEmbedding {
+  id     String @id @default(cuid())
+  caseId String @unique
+
+  caseProfile CaseProfile @relation(fields: [caseId], references: [caseId], onDelete: Cascade)
+
+  embedding Unsupported("vector(1536)")
+
+  createdAt DateTime @default(now())
 }
 
 enum NotificationType {

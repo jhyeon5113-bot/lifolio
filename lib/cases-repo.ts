@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getAIProvider } from "@/lib/ai";
+import { getEmbeddingProvider, type EmbeddingProvider } from "@/lib/embedding";
+import { buildEmbeddingText } from "@/lib/embedding/case-text";
+import { findNearestCaseEmbeddings } from "@/lib/embedding/search";
 import type {
   DecisionCaseDetail,
   DecisionOption as CaseDecisionOption,
@@ -228,21 +231,52 @@ function looselyIncludes(haystack: string[], needle: string): boolean {
   return haystack.some((h) => h.includes(needle) || needle.includes(h));
 }
 
+export interface SimilarCaseQuery {
+  category: string;
+  criteria: string[];
+  concerns: string[];
+  background?: string;
+  situation?: string;
+  // Only used by the embedding path (buildEmbeddingText) — the text-match
+  // fallback below never needed these, so they're optional rather than
+  // touching every existing caller.
+  title?: string;
+  options?: string[];
+}
+
+async function explainAndAttach(
+  input: SimilarCaseQuery,
+  matches: { row: CaseRow; profile: ProfileRow }[],
+): Promise<SimilarCaseMatch[]> {
+  const provider = getAIProvider();
+  return Promise.all(
+    matches.map(async ({ row, profile }) => {
+      const { reason } = await provider.explainSimilarity({
+        userCategory: input.category,
+        userCriteria: input.criteria,
+        userConcerns: input.concerns,
+        caseCriteria: row.criteria,
+        caseConcerns: row.anxieties,
+      });
+      return { case: toLibraryCase(row, profile), reason };
+    }),
+  );
+}
+
 // Cases are found by scoring against the shared decision_cases table — AI
 // never picks the matches, it only explains why each one was picked
 // (Role 4, see lib/ai/types.ts). Category match, shared criteria/concerns,
 // and free-text topic similarity (background+situation) all contribute —
 // the last one is what catches "same topic" even when the user's tags don't
 // literally match the case's own wording.
-export async function findSimilarCases(
-  input: {
-    category: string;
-    criteria: string[];
-    concerns: string[];
-    background?: string;
-    situation?: string;
-  },
-  limit = 3,
+//
+// This is the fallback path — used whenever no embedding provider is
+// configured yet (see lib/embedding/). Once one is, findSimilarCases below
+// switches over to vector search; this stays here so case recommendations
+// keep working in production during that gap rather than going dark.
+async function findSimilarCasesByTextMatch(
+  input: SimilarCaseQuery,
+  limit: number,
 ): Promise<SimilarCaseMatch[]> {
   const caseRows = await prisma.decision_cases.findMany();
   const profiles = await prisma.caseProfile.findMany({
@@ -269,17 +303,62 @@ export async function findSimilarCases(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
-  const provider = getAIProvider();
-  return Promise.all(
-    scored.map(async ({ row, profile }) => {
-      const { reason } = await provider.explainSimilarity({
-        userCategory: input.category,
-        userCriteria: input.criteria,
-        userConcerns: input.concerns,
-        caseCriteria: row.criteria,
-        caseConcerns: row.anxieties,
-      });
-      return { case: toLibraryCase(row, profile), reason };
-    }),
-  );
+  return explainAndAttach(input, scored);
+}
+
+// Vector search over CaseEmbedding (pgvector cosine distance) — no AI
+// re-ranking on top for MVP, the DB's own nearest-neighbor ordering is the
+// final result. explainSimilarity (Role 4) is unchanged: it still only
+// writes the "why this case" caption for whichever cases won the search,
+// same as the text-match path above.
+async function findSimilarCasesByEmbedding(
+  provider: EmbeddingProvider,
+  input: SimilarCaseQuery,
+  limit: number,
+): Promise<SimilarCaseMatch[]> {
+  const queryText = buildEmbeddingText({
+    title: input.title ?? "",
+    category: input.category,
+    background: input.background ?? "",
+    situation: input.situation ?? "",
+    options: input.options ?? [],
+    criteria: input.criteria,
+    concerns: input.concerns,
+  });
+  const queryEmbedding = await provider.embed(queryText);
+  const nearest = await findNearestCaseEmbeddings(queryEmbedding, limit);
+  if (nearest.length === 0) return [];
+
+  const caseIds = nearest.map((n) => n.caseId);
+  const [caseRows, profiles] = await Promise.all([
+    prisma.decision_cases.findMany({ where: { id: { in: caseIds } } }),
+    prisma.caseProfile.findMany({ where: { caseId: { in: caseIds } } }),
+  ]);
+  const rowByCaseId = new Map(caseRows.map((r) => [r.id, r]));
+  const profileByCaseId = new Map(profiles.map((p) => [p.caseId, p]));
+
+  // Preserve pgvector's nearest-first ordering — Map lookups, not another
+  // DB-order-dependent sort, since findMany's IN-clause result order isn't
+  // guaranteed to match `nearest`'s order.
+  const matches = nearest
+    .map((n) => {
+      const row = rowByCaseId.get(n.caseId);
+      const profile = profileByCaseId.get(n.caseId);
+      if (!row || !profile) return null;
+      return { row, profile };
+    })
+    .filter((entry): entry is { row: CaseRow; profile: ProfileRow } => entry !== null);
+
+  return explainAndAttach(input, matches);
+}
+
+export async function findSimilarCases(
+  input: SimilarCaseQuery,
+  limit = 3,
+): Promise<SimilarCaseMatch[]> {
+  const embeddingProvider = getEmbeddingProvider();
+  if (embeddingProvider) {
+    return findSimilarCasesByEmbedding(embeddingProvider, input, limit);
+  }
+  return findSimilarCasesByTextMatch(input, limit);
 }

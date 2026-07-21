@@ -4,6 +4,9 @@ import type { Decision, DecisionOption, Reflection } from "@/lib/generated/prism
 import { formatDate } from "@/lib/format-date";
 import { notifyNow } from "@/lib/notifications/create";
 import { libraryPublishedContent } from "@/lib/notifications/content";
+import { getEmbeddingProvider } from "@/lib/embedding";
+import { buildEmbeddingText } from "@/lib/embedding/case-text";
+import { storeCaseEmbedding } from "@/lib/embedding/search";
 
 function categoryToTags(category: string): string {
   return category
@@ -114,6 +117,8 @@ export async function approveSubmission(id: string): Promise<{ dedupeKey: string
   // constrains to 1~100 — clamp defensively rather than let a 0 crash the write.
   const satisfaction = Math.min(100, Math.max(1, submission.satisfaction));
 
+  let caseId = "";
+
   await prisma.$transaction(async (tx) => {
     const caseRow = await tx.decision_cases.create({
       data: {
@@ -158,6 +163,8 @@ export async function approveSubmission(id: string): Promise<{ dedupeKey: string
       },
     });
 
+    caseId = caseRow.id;
+
     await tx.libraryCaseSubmission.update({
       where: { id },
       data: { status: "APPROVED", publishedCaseDedupeKey: dedupeKey, reviewedAt: new Date() },
@@ -175,6 +182,29 @@ export async function approveSubmission(id: string): Promise<{ dedupeKey: string
   ).catch((error) => {
     console.error(`approveSubmission: notifyNow failed for submission ${id}:`, error);
   });
+
+  // Also outside the transaction (network call) and a no-op today — no
+  // embedding provider is configured yet (see lib/embedding/). Once one is,
+  // every newly-approved case gets embedded right here, from its
+  // pre-decision fields only (never expectedOutcome/actualOutcome/etc.).
+  const embeddingProvider = getEmbeddingProvider();
+  if (embeddingProvider) {
+    try {
+      const text = buildEmbeddingText({
+        title: submission.title,
+        category: submission.category,
+        background: submission.background,
+        situation: submission.situation,
+        options: submission.options,
+        criteria: submission.criteria,
+        concerns: submission.anxieties,
+      });
+      const embedding = await embeddingProvider.embed(text);
+      await storeCaseEmbedding(caseId, embedding);
+    } catch (error) {
+      console.error(`approveSubmission: embedding failed for submission ${id}:`, error);
+    }
+  }
 
   return { dedupeKey };
 }
