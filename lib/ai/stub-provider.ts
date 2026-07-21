@@ -15,10 +15,10 @@ import type {
   DecisionStructureOutput,
   DecisionTraitInput,
   DecisionTraitOutput,
+  DraftReviewInput,
+  DraftReviewOutput,
   MissingInfoInput,
   MissingInfoOutput,
-  NormalizeTermInput,
-  NormalizeTermOutput,
   SimilarityExplanationInput,
   SimilarityExplanationOutput,
 } from "./types";
@@ -45,12 +45,6 @@ function classifyValue(term: string): string | null {
   }
   return null;
 }
-
-const NORMALIZATION_MAP: Record<string, string> = {
-  돈: "경제적 안정",
-  스펙: "취업 경쟁력",
-  "경험 많이 하고 싶어요": "성장",
-};
 
 const CATEGORY_KEYWORDS: Record<DecisionCategory, string[]> = {
   "진로/취업": ["취업", "인턴", "이직", "커리어", "직무"],
@@ -279,8 +273,22 @@ export const stubProvider: AIProvider = {
     return null;
   },
 
-  async normalizeTerm({ term }: NormalizeTermInput): Promise<NormalizeTermOutput> {
-    return { normalized: NORMALIZATION_MAP[term] ?? term };
+  async reviewStructuredDraft(input: DraftReviewInput): Promise<DraftReviewOutput> {
+    // Every field is already guaranteed non-empty by the time this runs
+    // (detectMissingInfo's loop only exits once they are) — the actual
+    // review this role is meant to do (misplaced content, "substantive
+    // enough to recommend well") needs real language understanding the
+    // stub doesn't have, so it never fabricates a verdict it can't back.
+    // Always passes the draft through unchanged; a real provider replaces
+    // this with genuine review.
+    return {
+      readyForRecommendation: true,
+      background: input.background,
+      situation: input.situation,
+      options: input.options,
+      criteria: input.criteria,
+      concerns: input.concerns,
+    };
   },
 
   async explainSimilarity(

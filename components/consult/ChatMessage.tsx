@@ -5,9 +5,17 @@ import { OptionExpectationsForm, type OptionExpectation } from "@/components/con
 import { CriteriaForm } from "@/components/consult/CriteriaForm";
 import { SummaryCard } from "@/components/consult/SummaryCard";
 import { ReflectionDatePicker } from "@/components/consult/ReflectionDatePicker";
+import { DraftReviewForm } from "@/components/consult/DraftReviewForm";
 import type { ConsultMessage } from "@/app/(app)/consult/types";
 
-const WIDE_KINDS = new Set(["summary", "optionsQuestion", "optionExpectations", "criteriaQuestion", "reflectionDate"]);
+const WIDE_KINDS = new Set([
+  "summary",
+  "optionsQuestion",
+  "optionExpectations",
+  "criteriaQuestion",
+  "reflectionDate",
+  "draftReviewQuestions",
+]);
 
 function ChatMessageImpl({
   message,
@@ -17,6 +25,7 @@ function ChatMessageImpl({
   onCriteriaSubmit,
   onFinalChoice,
   onReflectionDate,
+  onDraftReviewSubmit,
 }: {
   message: ConsultMessage;
   decisionId: string | null;
@@ -25,6 +34,7 @@ function ChatMessageImpl({
   onCriteriaSubmit: (messageId: string, criteria: string[]) => void;
   onFinalChoice: (messageId: string, choice: string, confidence: number) => void;
   onReflectionDate: (messageId: string, date: Date | null) => void;
+  onDraftReviewSubmit: (messageId: string, answers: Record<string, string>) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -90,6 +100,14 @@ function ChatMessageImpl({
           locked={message.locked}
           onSubmit={(choice, confidence) => onFinalChoice(message.id, choice, confidence)}
           returnTo={decisionId ? `/consult?decisionId=${decisionId}` : undefined}
+        />
+      )}
+      {message.kind === "draftReviewQuestions" && (
+        <DraftReviewForm
+          issues={message.issues}
+          locked={message.locked}
+          answer={message.answer}
+          onSubmit={(answers) => onDraftReviewSubmit(message.id, answers)}
         />
       )}
       {message.kind === "reflectionDate" && (

@@ -9,7 +9,7 @@ import type { OptionExpectation } from "@/components/consult/OptionExpectationsF
 import { consultQuickTopics } from "@/lib/mock-data";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { parseListAnswer } from "@/lib/ai/parse-list-answer";
-import type { MissingInfoQuestion, StructuredField } from "@/lib/ai";
+import type { DraftReviewIssue, MissingInfoQuestion, StructuredField } from "@/lib/ai";
 import type { ConsultMessage, StructuredDraft } from "./types";
 
 type Phase =
@@ -18,6 +18,7 @@ type Phase =
   | "optionsForm"
   | "optionExpectationsForm"
   | "criteriaForm"
+  | "draftReviewForm"
   | "processing"
   | "summary"
   | "reflectionDate"
@@ -32,6 +33,7 @@ function toISODate(date: Date): string {
 
 const DEFAULT_DRAFT: StructuredDraft = {
   category: "학업/전공",
+  title: "",
   summary: "",
   background: "",
   situation: "",
@@ -42,6 +44,7 @@ const DEFAULT_DRAFT: StructuredDraft = {
 
 interface FetchedDecision {
   id: string;
+  title: string;
   category: string;
   rawInput: string;
   summary: string | null;
@@ -121,7 +124,7 @@ function ConsultContent() {
 
       if (!next) {
         setCurrentQuestion(null);
-        await runSummaryStep(currentDraft);
+        await runDraftReviewStep(currentDraft);
         return;
       }
 
@@ -147,6 +150,116 @@ function ConsultContent() {
       replaceWithError(typingId, "다음 질문을 준비하는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.");
       setPhase("loop");
     }
+  };
+
+  // Runs once, right when detectMissingInfo's loop structurally closes
+  // (every field non-empty) — never re-run after this, even if the
+  // corrective questions branch fires (that's a single round, not another
+  // loop). A failed/slow AI call here should never block the user from
+  // seeing recommendations, so any error just falls through to
+  // runSummaryStep with the draft as-is rather than surfacing an error.
+  const runDraftReviewStep = async (currentDraft: StructuredDraft) => {
+    const typingId = nextId();
+    pushMessage({ id: typingId, role: "ai", kind: "typing" });
+
+    try {
+      const res = await fetchWithTimeout("/api/ai/review-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentDraft),
+      });
+      if (!res.ok) throw new Error(`review-draft failed: ${res.status}`);
+      const result:
+        | { readyForRecommendation: true; background: string; situation: string; options: string[]; criteria: string[]; concerns: string[] }
+        | { readyForRecommendation: false; issues: DraftReviewIssue[] } = await res.json();
+      removeMessage(typingId);
+
+      if (!result.readyForRecommendation) {
+        pushMessage({ id: nextId(), role: "ai", kind: "draftReviewQuestions", issues: result.issues, locked: false });
+        setPhase("draftReviewForm");
+        return;
+      }
+
+      const updated: StructuredDraft = {
+        ...currentDraft,
+        background: result.background,
+        situation: result.situation,
+        options: result.options,
+        criteria: result.criteria,
+        concerns: result.concerns,
+      };
+      setDraft(updated);
+
+      if (decisionId) {
+        try {
+          await fetch(`/api/decisions/${decisionId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              background: updated.background,
+              situation: updated.situation,
+              criteria: updated.criteria,
+              concerns: updated.concerns,
+              // options intentionally omitted — the PATCH route replaces
+              // DecisionOption rows wholesale (title + expectedPositive +
+              // expectedNegative), and this step only has plain option
+              // titles, not the expectations already collected for them.
+            }),
+          });
+        } catch {
+          // Non-fatal — recommendation still uses the locally-updated draft.
+        }
+      }
+
+      await runSummaryStep(updated);
+    } catch {
+      removeMessage(typingId);
+      await runSummaryStep(currentDraft);
+    }
+  };
+
+  const handleDraftReviewSubmit = async (messageId: string, answers: Record<string, string>) => {
+    if (!decisionId) return;
+    lockMessage(messageId, { answer: answers });
+    setPhase("processing");
+
+    const updated: StructuredDraft = { ...draft };
+    for (const [field, value] of Object.entries(answers)) {
+      const key = field as StructuredField;
+      if (key === "background" || key === "situation") {
+        updated[key] = value;
+      } else {
+        updated[key] = parseListAnswer(value);
+      }
+    }
+    setDraft(updated);
+
+    try {
+      // "options" deliberately excluded even if it was one of the flagged
+      // fields — the PATCH route replaces DecisionOption rows wholesale
+      // (title + expectedPositive + expectedNegative), and a corrective
+      // text answer here is just a plain title list, not full
+      // expectations. Recommendation still picks up the corrected options
+      // from the local draft; only the DB write is skipped for that field.
+      const patchBody = Object.fromEntries(
+        Object.keys(answers)
+          .filter((field) => field !== "options")
+          .map((field) => [field, updated[field as StructuredField]]),
+      );
+      if (Object.keys(patchBody).length > 0) {
+        await fetch(`/api/decisions/${decisionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patchBody),
+        });
+      }
+    } catch {
+      // Non-fatal — recommendation still uses the locally-updated draft.
+    }
+
+    // Exactly one corrective round, per design — go straight to
+    // recommendation next, never call review-draft again.
+    await runSummaryStep(updated);
   };
 
   const runSummaryStep = async (currentDraft: StructuredDraft) => {
@@ -211,6 +324,7 @@ function ConsultContent() {
         const structured = await structureRes.json();
         const newDraft: StructuredDraft = {
           category: structured.category ?? DEFAULT_DRAFT.category,
+          title: structured.title ?? "",
           summary: structured.summary ?? "",
           background: structured.background ?? "",
           situation: structured.situation ?? "",
@@ -222,7 +336,7 @@ function ConsultContent() {
         const decisionRes = await fetch("/api/decisions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rawInput: trimmed, title: structured.title, ...newDraft }),
+          body: JSON.stringify({ rawInput: trimmed, ...newDraft }),
         });
         if (!decisionRes.ok) throw new Error(`decision create failed: ${decisionRes.status}`);
         const decision = await decisionRes.json();
@@ -420,6 +534,7 @@ function ConsultContent() {
   const resumeFromDecision = async (fetched: FetchedDecision) => {
     const known: StructuredDraft = {
       category: (fetched.category as StructuredDraft["category"]) || DEFAULT_DRAFT.category,
+      title: fetched.title,
       // Older decisions created before this column existed never got a
       // summary written — fall back to situation (always set) rather than
       // ever showing a blank paragraph atop the resumed SummaryCard.
@@ -753,6 +868,7 @@ function ConsultContent() {
                     onCriteriaSubmit={handleCriteriaSubmit}
                     onFinalChoice={handleFinalChoice}
                     onReflectionDate={handleReflectionDate}
+                    onDraftReviewSubmit={handleDraftReviewSubmit}
                   />
                 ))}
                 <div ref={bottomRef} />
