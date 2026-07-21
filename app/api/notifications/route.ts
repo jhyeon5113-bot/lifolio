@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
-const LIST_LIMIT = 20;
+const LIST_LIMIT = 200;
 
 export async function GET() {
   const session = await auth();
