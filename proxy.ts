@@ -17,7 +17,7 @@ export default auth((req) => {
     // Called by the GitHub Actions cron workflow
     // (.github/workflows/notifications-cron.yml), which has no browser
     // session — protected instead by a bearer-token check inside each
-    // route (lib/notifications/internalAuth.ts).
+    // route (lib/notifications/internal-auth.ts).
     pathname.startsWith("/api/internal/");
 
   if (!req.auth && !isPublic) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireInternalSecret } from "@/lib/notifications/internalAuth";
+import { requireInternalSecret } from "@/lib/notifications/internal-auth";
 import { computeDailyQueue } from "@/lib/notifications/compute";
 
 // Called once a day (by the cron-trigger Worker, at the first of the three

@@ -4,7 +4,7 @@
 // grants it (Part 3 §2): structuring, missing-info detection, normalization,
 // similarity explanation, reflection analysis, and Decision DNA analysis.
 // No provider is wired in yet; `lib/ai/index.ts` currently always returns
-// the rule-based stub in `lib/ai/stubProvider.ts`.
+// the rule-based stub in `lib/ai/stub-provider.ts`.
 
 /** One of the app's real, already-established case categories (see libraryFilters). */
 export type DecisionCategory = "진로/취업" | "학업/전공" | "창업/도전";

@@ -5,11 +5,11 @@ import { getAIProvider } from "@/lib/ai";
 import { createSubmissionDraft, createLibraryCaseUpdateDraft } from "@/lib/library-review-repo";
 import { getMonthsAfterLabel } from "@/lib/reflection-timeline-data";
 import { clamp } from "@/lib/clamp";
-import { withTimeout } from "@/lib/withTimeout";
+import { withTimeout } from "@/lib/with-timeout";
 import { LEVEL_1_REFLECTION_THRESHOLD } from "@/lib/dna-repo";
 import { notifyNow } from "@/lib/notifications/create";
 import { reportLevelUpContent } from "@/lib/notifications/content";
-import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function POST(
   request: Request,

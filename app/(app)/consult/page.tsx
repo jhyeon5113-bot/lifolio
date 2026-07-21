@@ -7,8 +7,8 @@ import { Header } from "@/components/Header";
 import { ChatMessage } from "@/components/consult/ChatMessage";
 import type { OptionExpectation } from "@/components/consult/OptionExpectationsForm";
 import { consultQuickTopics } from "@/lib/mock-data";
-import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
-import { parseListAnswer } from "@/lib/ai/parseListAnswer";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { parseListAnswer } from "@/lib/ai/parse-list-answer";
 import type { MissingInfoQuestion, StructuredField } from "@/lib/ai";
 import type { ConsultMessage, StructuredDraft } from "./types";
 

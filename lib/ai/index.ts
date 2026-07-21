@@ -1,9 +1,9 @@
 // Single entry point the rest of the app should import from — never reach
-// into stubProvider.ts directly. Swapping in a real LLM later means adding
+// into stub-provider.ts directly. Swapping in a real LLM later means adding
 // a new provider file and changing only the branch below.
 
 import type { AIProvider } from "./types";
-import { stubProvider } from "./stubProvider";
+import { stubProvider } from "./stub-provider";
 
 export function getAIProvider(): AIProvider {
   // No provider is wired up yet (decision pending — see PRD Part 3 chat).

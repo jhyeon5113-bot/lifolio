@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
-import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function POST() {
   const session = await auth();

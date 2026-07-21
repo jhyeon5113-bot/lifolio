@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getAIProvider } from "@/lib/ai";
-import { withTimeout } from "@/lib/withTimeout";
-import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { withTimeout } from "@/lib/with-timeout";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   const session = await auth();

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getHistoryEntries } from "@/lib/history-data";
-import { checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 function deriveTitle(options: string[], situation: string, rawInput: string): string {
   if (options.length >= 2) return `${options[0]} vs ${options[1]}`;

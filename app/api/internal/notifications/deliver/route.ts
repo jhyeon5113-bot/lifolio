@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireInternalSecret } from "@/lib/notifications/internalAuth";
+import { requireInternalSecret } from "@/lib/notifications/internal-auth";
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
 

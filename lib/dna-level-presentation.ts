@@ -2,7 +2,7 @@
 // ladder (Level 1-5). Kept separate from lib/dna-repo.ts (Prisma-dependent)
 // so Client Components like ReportTabs can import this without dragging
 // server-only code into the browser bundle. Only Level 1 has real content
-// today (see lib/ai/stubProvider.ts) — Levels 2-5 are locked placeholders
+// today (see lib/ai/stub-provider.ts) — Levels 2-5 are locked placeholders
 // per the PRD's MVP scoping, shown here purely for the confidence ladder.
 
 export type DnaLevel = 1 | 2 | 3 | 4 | 5;
