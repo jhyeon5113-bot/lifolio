@@ -17,6 +17,8 @@ import type {
   DecisionSummaryOutput,
   DecisionTraitInput,
   DecisionTraitOutput,
+  GenerateTitleInput,
+  GenerateTitleOutput,
   MissingInfoInput,
   MissingInfoOutput,
   NormalizeTermInput,
@@ -157,6 +159,15 @@ export const stubProvider: AIProvider = {
       .trim();
 
     return { summary };
+  },
+
+  async generateTitle(input: GenerateTitleInput): Promise<GenerateTitleOutput> {
+    if (input.options.length >= 2) {
+      return { title: `${input.options[0]} vs ${input.options[1]}` };
+    }
+    const fallback = input.situation.trim() || input.background.trim() || input.options[0] || "";
+    const title = fallback.length > 30 ? `${fallback.slice(0, 30)}…` : fallback;
+    return { title: title || "제목 없는 고민" };
   },
 
   async normalizeTerm({ term }: NormalizeTermInput): Promise<NormalizeTermOutput> {

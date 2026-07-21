@@ -97,7 +97,7 @@ function ConsultContent() {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch, locked: true } : m)));
   };
 
-  const runMissingInfoStep = async (currentDraft: StructuredDraft) => {
+  const runMissingInfoStep = async (currentDraft: StructuredDraft, idOverride?: string) => {
     const typingId = nextId();
     pushMessage({ id: typingId, role: "ai", kind: "typing" });
 
@@ -119,7 +119,7 @@ function ConsultContent() {
 
       if (!next) {
         setCurrentQuestion(null);
-        await runSummaryStep(currentDraft);
+        await runSummaryStep(currentDraft, idOverride);
         return;
       }
 
@@ -147,12 +147,12 @@ function ConsultContent() {
     }
   };
 
-  const runSummaryStep = async (currentDraft: StructuredDraft) => {
+  const runSummaryStep = async (currentDraft: StructuredDraft, idOverride?: string) => {
     const typingId = nextId();
     pushMessage({ id: typingId, role: "ai", kind: "typing" });
 
     try {
-      const [summaryRes, matchesRes] = await Promise.all([
+      const [summaryRes, matchesRes, titleRes] = await Promise.all([
         fetchWithTimeout("/api/ai/summarize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -169,10 +169,30 @@ function ConsultContent() {
             situation: currentDraft.situation,
           }),
         }),
+        fetchWithTimeout("/api/ai/title", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(currentDraft),
+        }),
       ]);
       if (!summaryRes.ok || !matchesRes.ok) throw new Error("summary step failed");
       const { summary } = await summaryRes.json();
       const matches = await matchesRes.json();
+
+      // Best-effort — the placeholder title from decision creation stays if
+      // this fails or times out, which is a strictly worse but never broken
+      // title, so it's not worth blocking or erroring the summary screen.
+      const targetId = idOverride ?? decisionId;
+      if (targetId && titleRes.ok) {
+        const { title } = await titleRes.json();
+        if (typeof title === "string" && title.trim()) {
+          fetch(`/api/decisions/${targetId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title }),
+          }).catch(() => {});
+        }
+      }
 
       removeMessage(typingId);
       pushMessage({
@@ -235,7 +255,7 @@ function ConsultContent() {
         setDecisionId(decision.id);
         setDraft(newDraft);
         removeMessage(typingId);
-        await runMissingInfoStep(newDraft);
+        await runMissingInfoStep(newDraft, decision.id);
       } catch {
         replaceWithError(typingId, "생각을 정리하는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.");
         setPhase("intro");

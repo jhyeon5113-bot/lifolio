@@ -23,6 +23,8 @@ export type {
   DecisionSummaryOutput,
   DecisionTraitInput,
   DecisionTraitOutput,
+  GenerateTitleInput,
+  GenerateTitleOutput,
   MissingInfoInput,
   MissingInfoOutput,
   MissingInfoQuestion,

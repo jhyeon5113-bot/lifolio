@@ -43,6 +43,28 @@ export interface DecisionSummaryOutput {
   summary: string;
 }
 
+// ── Role 1c: Decision Title ──────────────────────────────────────────────
+// Also runs once, alongside Role 1b, once the structuring loop closes.
+// Distinct from the placeholder title Decision.create() sets from the raw
+// first message (see deriveTitle in app/api/decisions/route.ts) — that one
+// only ever sees whatever the structuring step extracted from a single
+// message, often before options/criteria exist yet. This role re-titles
+// the decision from the complete draft, so "vs" comparisons and short
+// paraphrases are only ever built from real, final data.
+
+export interface GenerateTitleInput {
+  category: string;
+  background: string;
+  situation: string;
+  options: string[];
+  criteria: string[];
+  concerns: string[];
+}
+
+export interface GenerateTitleOutput {
+  title: string;
+}
+
 // ── Role 2: Missing Information Detection ───────────────────────────────
 // Looks only at which required fields are still empty, in a fixed order
 // (background → situation → options → criteria → concerns), and returns
@@ -175,6 +197,7 @@ export interface DecisionTraitOutput {
 export interface AIProvider {
   structureDecision(input: DecisionStructureInput): Promise<DecisionStructureOutput>;
   summarizeDecision(input: DecisionSummaryInput): Promise<DecisionSummaryOutput>;
+  generateTitle(input: GenerateTitleInput): Promise<GenerateTitleOutput>;
   detectMissingInfo(input: MissingInfoInput): Promise<MissingInfoOutput>;
   normalizeTerm(input: NormalizeTermInput): Promise<NormalizeTermOutput>;
   explainSimilarity(input: SimilarityExplanationInput): Promise<SimilarityExplanationOutput>;

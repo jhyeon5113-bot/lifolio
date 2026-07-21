@@ -49,6 +49,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const data: {
+    title?: string;
     category?: string;
     background?: string;
     situation?: string;
@@ -60,6 +61,7 @@ export async function PATCH(
     status?: "IN_PROGRESS" | "DECIDED" | "COMPLETED";
     expectedReflectionDate?: Date;
   } = {};
+  if (typeof body.title === "string" && body.title.trim()) data.title = body.title.trim();
   if (typeof body.category === "string") data.category = body.category;
   if (typeof body.background === "string") data.background = body.background;
   if (typeof body.situation === "string") data.situation = body.situation;
