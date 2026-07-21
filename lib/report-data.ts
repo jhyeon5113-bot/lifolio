@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { DecisionDnaLevel1Output } from "@/lib/ai";
 import { getOrCreateDecisionDnaSnapshot } from "@/lib/dna-repo";
 import { getDecisionTraitProfile, type DecisionTraitProfileView } from "@/lib/trait-repo";
+import { GOOD_DECISION_SATISFACTION_THRESHOLD } from "@/lib/satisfaction-thresholds";
 
 export interface CategoryBreakdownRow {
   label: string;
@@ -123,7 +124,10 @@ export async function getReportData(userId: string | undefined): Promise<ReportD
     summary: d.reflection.aiComparisonSummary || d.reflection.actualVsExpected,
   });
 
-  const goodDecisions = completed.filter((d) => d.reflection.satisfaction >= 70).slice(0, 2).map(toSummary);
+  const goodDecisions = completed
+    .filter((d) => d.reflection.satisfaction >= GOOD_DECISION_SATISFACTION_THRESHOLD)
+    .slice(0, 2)
+    .map(toSummary);
   const roughDecisions = completed
     .filter((d) => d.reflection.satisfaction < 50 || d.reflection.wouldChooseAgain === "NO")
     .slice(0, 2)

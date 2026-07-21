@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { LoadError } from "@/components/LoadError";
 import { useEscapeToClose } from "@/lib/useEscapeToClose";
 import type { ReflectionTimelineEntry } from "@/lib/reflection-timeline-data";
+import { GOOD_DECISION_SATISFACTION_THRESHOLD } from "@/lib/satisfaction-thresholds";
 
 const CHOICE_LABEL: Record<ReflectionTimelineEntry["wouldChooseAgain"], string> = {
   YES: "예",
@@ -13,7 +14,7 @@ const CHOICE_LABEL: Record<ReflectionTimelineEntry["wouldChooseAgain"], string> 
 };
 
 function satisfactionEmoji(satisfaction: number): string {
-  if (satisfaction >= 70) return "😊";
+  if (satisfaction >= GOOD_DECISION_SATISFACTION_THRESHOLD) return "😊";
   if (satisfaction >= 40) return "😐";
   return "😕";
 }

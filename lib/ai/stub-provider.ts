@@ -26,6 +26,7 @@ import type {
   SimilarityExplanationInput,
   SimilarityExplanationOutput,
 } from "./types";
+import { GOOD_DECISION_SATISFACTION_THRESHOLD } from "@/lib/satisfaction-thresholds";
 
 const CRITERIA_CHOICES = ["성장", "취업", "돈", "경험", "인간관계", "안정성"];
 
@@ -213,7 +214,8 @@ export const stubProvider: AIProvider = {
       satisfactionSum += decision.satisfaction;
       if (decision.wouldChooseAgain === "YES") chooseAgainYes += 1;
 
-      const wentWell = decision.satisfaction >= 70 || decision.wouldChooseAgain === "YES";
+      const wentWell =
+        decision.satisfaction >= GOOD_DECISION_SATISFACTION_THRESHOLD || decision.wouldChooseAgain === "YES";
       if (wentWell) {
         for (const criterion of decision.criteria) {
           const category = classifyValue(criterion);
