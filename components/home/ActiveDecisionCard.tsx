@@ -9,10 +9,12 @@ import { getCheckInLabel } from "@/lib/decision-status-presentation";
 export const ActiveDecisionCard = memo(function ActiveDecisionCard({
   decision,
   onStatusUpdateClick,
+  justUpdated = false,
   className = "",
 }: {
   decision: ActiveDecisionView;
   onStatusUpdateClick: (decisionId: string) => void;
+  justUpdated?: boolean;
   className?: string;
 }) {
   const cardClassName = `bg-white border border-outline-variant p-u-md rounded-xl shadow-sm flex flex-col ${
@@ -47,9 +49,17 @@ export const ActiveDecisionCard = memo(function ActiveDecisionCard({
             <button
               type="button"
               onClick={() => onStatusUpdateClick(decision.id)}
-              className="w-full py-2.5 text-label-md text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors active:scale-95"
+              disabled={justUpdated}
+              className={`w-full py-2.5 text-label-md rounded-lg transition-colors active:scale-95 flex items-center justify-center gap-1 ${
+                justUpdated
+                  ? "bg-secondary-container text-on-secondary-container"
+                  : "text-primary border border-primary/30 hover:bg-primary/5"
+              }`}
             >
-              상태 업데이트
+              {justUpdated && (
+                <span className="material-symbols-outlined text-[18px]">check</span>
+              )}
+              {justUpdated ? "업데이트 완료" : "상태 업데이트"}
             </button>
           </div>
         )}

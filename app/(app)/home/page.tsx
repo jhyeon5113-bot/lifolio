@@ -55,6 +55,7 @@ export default function HomePage() {
   const [completedDecisions, setCompletedDecisions] = useState<CompletedDecisionView[]>([]);
   const [todaysReading, setTodaysReading] = useState<LibraryCase[]>([]);
   const [statusSheetDecisionId, setStatusSheetDecisionId] = useState<string | null>(null);
+  const [justUpdatedId, setJustUpdatedId] = useState<string | null>(null);
   const [timelineDecision, setTimelineDecision] = useState<{ id: string; title: string } | null>(null);
   const [savedToast, setSavedToast] = useState<ReflectionSavedToastPayload | null>(null);
   const [activeError, setActiveError] = useState(false);
@@ -178,6 +179,10 @@ export default function HomePage() {
     setActiveDecisions((prev) =>
       prev.map((decision) => (decision.id === decisionId ? { ...decision, currentStatus: status } : decision)),
     );
+    setJustUpdatedId(decisionId);
+    setTimeout(() => {
+      setJustUpdatedId((current) => (current === decisionId ? null : current));
+    }, 1500);
     try {
       const res = await fetch(`/api/decisions/${decisionId}/status`, {
         method: "POST",
@@ -318,6 +323,7 @@ export default function HomePage() {
                       key={decision.id}
                       decision={decision}
                       onStatusUpdateClick={setStatusSheetDecisionId}
+                      justUpdated={decision.id === justUpdatedId}
                       className="min-w-[280px] md:min-w-[340px] snap-start"
                     />
                   ))}
