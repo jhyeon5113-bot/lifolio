@@ -438,12 +438,17 @@ export function ReportTabs({ data }: { data: ReportData }) {
             <p className="text-label-md text-on-surface-variant/60 mb-6">
               Level 1은 회고 {LEVEL_THRESHOLDS[1]}건부터 열려요
             </p>
-            <div className="w-full max-w-xs h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+            <div className="w-full max-w-xs h-1.5 bg-surface-container-highest rounded-full overflow-hidden mb-2">
               <div
                 className="h-full bg-primary/30 rounded-full"
                 style={{ width: `${Math.min(100, ((dnaProgress?.completedCount ?? completedCount) / LEVEL_THRESHOLDS[1]) * 100)}%` }}
               />
             </div>
+            <p className="text-label-sm text-on-surface-variant/60">
+              {Math.max(0, LEVEL_THRESHOLDS[1] - (dnaProgress?.completedCount ?? completedCount)) > 0
+                ? `${Math.max(0, LEVEL_THRESHOLDS[1] - (dnaProgress?.completedCount ?? completedCount))}건 더 남았어요`
+                : "곧 열려요"}
+            </p>
           </div>
         )}
 
